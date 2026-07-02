@@ -9,6 +9,7 @@ import { registerLifecycleTools } from "./lifecycle.js";
 import { registerWorkspaceTools } from "./workspace.js";
 import { registerIntegrationTools } from "./integration.js";
 import { registerConversationTools } from "./conversation.js";
+import { registerSubAgentTools } from "./sub-agents.js";
 import { WorkOSSessionProvider } from "../auth/token-provider.js";
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
@@ -27,4 +28,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerLifecycleTools(server, ctx);
   registerIntegrationTools(server, { client: ctx.client, provider: ctx.provider, publicUrl: ctx.publicUrl, inboundToken: ctx.inboundToken });
   registerConversationTools(server, { conversations: ctx.conversations, client: ctx.client });
+  registerSubAgentTools(server, { subAgents: ctx.subAgents });
 }
