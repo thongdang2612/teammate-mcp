@@ -3,6 +3,7 @@ import { DiaflowOAuthProvider } from "../../../src/auth/oauth/provider.js";
 import { OAuthTokenStore } from "../../../src/auth/oauth/token-store.js";
 import { InMemoryClientStore } from "../../../src/auth/oauth/client-store.js";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 
 function setup() {
   const store = new OAuthTokenStore();
@@ -44,10 +45,10 @@ describe("DiaflowOAuthProvider", () => {
 
   it("verifyAccessToken rejects unknown tokens; revokeToken invalidates", async () => {
     const { store, provider, client } = setup();
-    await expect(provider.verifyAccessToken("bogus")).rejects.toThrow();
+    await expect(provider.verifyAccessToken("bogus")).rejects.toBeInstanceOf(InvalidTokenError);
     const code = store.createAuthCode({ seal: "s", workspaceId: null, clientId: client.client_id, redirectUri: "https://cb", codeChallenge: "ch", scopes: [] });
     const t = await provider.exchangeAuthorizationCode(client, code, undefined, "https://cb");
     await provider.revokeToken(client, { token: t.access_token });
-    await expect(provider.verifyAccessToken(t.access_token)).rejects.toThrow();
+    await expect(provider.verifyAccessToken(t.access_token)).rejects.toBeInstanceOf(InvalidTokenError);
   });
 });

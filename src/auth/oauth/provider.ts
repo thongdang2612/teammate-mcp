@@ -4,6 +4,7 @@ import type { OAuthClientInformationFull, OAuthTokens, OAuthTokenRevocationReque
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { OAuthTokenStore } from "./token-store.js";
 import type { InMemoryClientStore } from "./client-store.js";
+import { InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 
 export interface DiaflowOAuthProviderOptions {
   store: OAuthTokenStore;
@@ -33,7 +34,7 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
 
   async challengeForAuthorizationCode(_client: OAuthClientInformationFull, authorizationCode: string): Promise<string> {
     const code = this.opts.store.peekAuthCode(authorizationCode);
-    if (!code) throw new Error("invalid or expired authorization code");
+    if (!code) throw new InvalidGrantError("invalid or expired authorization code");
     return code.codeChallenge;
   }
 
@@ -44,9 +45,9 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
     redirectUri?: string,
   ): Promise<OAuthTokens> {
     const code = this.opts.store.takeAuthCode(authorizationCode);
-    if (!code) throw new Error("invalid or expired authorization code");
-    if (code.clientId !== client.client_id) throw new Error("client mismatch");
-    if (redirectUri !== undefined && redirectUri !== code.redirectUri) throw new Error("redirect_uri mismatch");
+    if (!code) throw new InvalidGrantError("invalid or expired authorization code");
+    if (code.clientId !== client.client_id) throw new InvalidGrantError("authorization code was issued to a different client");
+    if (redirectUri !== undefined && redirectUri !== code.redirectUri) throw new InvalidGrantError("redirect_uri mismatch");
     const { accessToken, refreshToken, expiresIn } = this.opts.store.issueTokens(
       { seal: code.seal, workspaceId: code.workspaceId },
       { clientId: code.clientId, scopes: code.scopes },
@@ -60,7 +61,7 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
     scopes?: string[],
   ): Promise<OAuthTokens> {
     const stored = this.opts.store.getRefresh(refreshToken);
-    if (!stored || stored.clientId !== client.client_id) throw new Error("invalid refresh token");
+    if (!stored || stored.clientId !== client.client_id) throw new InvalidGrantError("invalid refresh token");
     const grantScopes = scopes ?? stored.scopes;
     const issued = this.opts.store.issueTokens(
       { seal: stored.seal, workspaceId: stored.workspaceId },
@@ -71,7 +72,7 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const stored = this.opts.store.getAccess(token);
-    if (!stored) throw new Error("invalid or expired access token");
+    if (!stored) throw new InvalidTokenError("invalid or expired access token");
     return {
       token,
       clientId: stored.clientId,
