@@ -1,5 +1,5 @@
 import type { DiaflowClient } from "./client.js";
-import type { AgentDetail, TeammatePage } from "./types.js";
+import type { AgentDetail, TeammatePage, CreateTeammateFields, UpdateTeammateFields } from "./types.js";
 
 export interface ListParams {
   page?: number;
@@ -28,5 +28,17 @@ export class TeammatesApi {
 
   get(uniqueId: string): Promise<AgentDetail> {
     return this.client.request<AgentDetail>("GET", `/agents/${encodeURIComponent(uniqueId)}`);
+  }
+
+  create(fields: CreateTeammateFields): Promise<AgentDetail> {
+    return this.client.request<AgentDetail>("POST", "/agents", { body: fields });
+  }
+
+  update(uniqueId: string, fields: UpdateTeammateFields): Promise<AgentDetail> {
+    return this.client.request<AgentDetail>("PATCH", `/agents/${encodeURIComponent(uniqueId)}`, { body: { main: fields } });
+  }
+
+  checkName(name: string): Promise<{ isDuplicate: boolean }> {
+    return this.client.request<{ isDuplicate: boolean }>("POST", "/agents/check-name", { body: { name } });
   }
 }
