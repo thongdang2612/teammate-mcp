@@ -1,0 +1,26 @@
+# Render Blueprint — deploys the Dockerfile as a free web service.
+# In Render: New → Blueprint → connect this repo. Set the sync:false vars in the dashboard.
+# Render injects $PORT, which config.ts prefers over MCP_HTTP_PORT.
+services:
+  - type: web
+    name: teammate-mcp
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    branch: main
+    autoDeploy: true
+    envVars:
+      - key: MCP_TRANSPORT
+        value: http
+      - key: DIAFLOW_API_BASE
+        value: https://api.diaflow.io
+      # Set these in the Render dashboard (Environment). MCP_PUBLIC_URL is the
+      # onrender.com URL + /mcp — fill it after the first deploy reveals the host.
+      - key: MCP_PUBLIC_URL
+        sync: false
+      - key: MCP_INBOUND_TOKEN
+        sync: false
+      - key: DIAFLOW_TOKEN
+        sync: false
+      - key: DIAFLOW_WORKSPACE_ID
+        sync: false
