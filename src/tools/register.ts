@@ -7,6 +7,7 @@ import { registerAvatarTools } from "./avatar.js";
 import { registerSkillTools } from "./skills.js";
 import { registerLifecycleTools } from "./lifecycle.js";
 import { registerWorkspaceTools } from "./workspace.js";
+import { registerIntegrationTools } from "./integration.js";
 import { WorkOSSessionProvider } from "../auth/token-provider.js";
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
@@ -23,4 +24,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerAvatarTools(server, { teammates: ctx.teammates, client: ctx.client, presetHosts: [new URL(ctx.baseUrl).host] });
   registerSkillTools(server, { skills: ctx.skills });
   registerLifecycleTools(server, ctx);
+  registerIntegrationTools(server, { client: ctx.client, provider: ctx.provider, publicUrl: ctx.publicUrl, inboundToken: ctx.inboundToken });
 }

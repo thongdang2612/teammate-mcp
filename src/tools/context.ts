@@ -11,6 +11,8 @@ export interface ToolContext {
   teammates: TeammatesApi;
   skills: SkillsApi;
   baseUrl: string;
+  publicUrl?: string;
+  inboundToken?: string;
 }
 
 export function buildContext(cfg: AppConfig): ToolContext {
@@ -25,5 +27,13 @@ export function buildContext(cfg: AppConfig): ToolContext {
     onRotate: (seal) => provider.onRotate(seal),
   });
 
-  return { provider, client, teammates: new TeammatesApi(client), skills: new SkillsApi(client), baseUrl: cfg.diaflowApiBase };
+  return {
+    provider,
+    client,
+    teammates: new TeammatesApi(client),
+    skills: new SkillsApi(client),
+    baseUrl: cfg.diaflowApiBase,
+    publicUrl: cfg.publicUrl,
+    inboundToken: cfg.inboundToken,
+  };
 }
