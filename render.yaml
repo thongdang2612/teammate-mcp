@@ -14,10 +14,14 @@ services:
         value: http
       - key: DIAFLOW_API_BASE
         value: https://api.diaflow.io
+      - key: MCP_AUTH_MODE
+        value: oauth
       # Set these in the Render dashboard (Environment). MCP_PUBLIC_URL is the
       # onrender.com URL + /mcp — fill it after the first deploy reveals the host.
       - key: MCP_PUBLIC_URL
         sync: false
+      # DIAFLOW_TOKEN/MCP_INBOUND_TOKEN are unused while MCP_AUTH_MODE=oauth; kept as a
+      # fallback in case the service is switched back to static mode.
       - key: MCP_INBOUND_TOKEN
         sync: false
       - key: DIAFLOW_TOKEN
