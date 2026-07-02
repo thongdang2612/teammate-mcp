@@ -1,13 +1,16 @@
 import { z } from "zod";
 
+/** Empty-string env values are treated as absent, so defaults/optionals kick in. */
+const emptyToUndefined = (v: unknown): unknown => (v === "" ? undefined : v);
+
 const schema = z.object({
-  DIAFLOW_API_BASE: z.string().url(),
-  MCP_TRANSPORT: z.enum(["stdio", "http"]).default("stdio"),
-  MCP_HTTP_PORT: z.coerce.number().int().positive().default(8787),
-  MCP_PUBLIC_URL: z.string().url().optional(),
-  MCP_INBOUND_TOKEN: z.string().optional(),
-  DIAFLOW_TOKEN: z.string().optional(),
-  DIAFLOW_WORKSPACE_ID: z.coerce.number().int().positive().optional(),
+  DIAFLOW_API_BASE: z.url(),
+  MCP_TRANSPORT: z.preprocess(emptyToUndefined, z.enum(["stdio", "http"]).default("stdio")),
+  MCP_HTTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(8787)),
+  MCP_PUBLIC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  MCP_INBOUND_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
+  DIAFLOW_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
+  DIAFLOW_WORKSPACE_ID: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
 });
 
 export interface AppConfig {

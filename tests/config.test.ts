@@ -18,4 +18,21 @@ describe("loadConfig", () => {
     expect(cfg.transport).toBe("stdio");
     expect(cfg.httpPort).toBe(9000);
   });
+
+  it("treats empty-string optional env values as unset", () => {
+    const cfg = loadConfig({
+      DIAFLOW_API_BASE: "https://x",
+      MCP_PUBLIC_URL: "",
+      DIAFLOW_WORKSPACE_ID: "",
+      DIAFLOW_TOKEN: "",
+      MCP_INBOUND_TOKEN: "",
+      MCP_HTTP_PORT: "",
+    } as any);
+    expect(cfg.publicUrl).toBeUndefined();
+    expect(cfg.staticToken).toBeUndefined();
+    expect(cfg.inboundToken).toBeUndefined();
+    expect(cfg.staticWorkspaceId).toBeUndefined();
+    expect(cfg.httpPort).toBe(8787);
+    expect(cfg.transport).toBe("stdio");
+  });
 });
