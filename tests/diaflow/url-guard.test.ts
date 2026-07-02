@@ -23,6 +23,28 @@ describe("isBlockedAddress", () => {
   it("allows a public IPv4 address", () => {
     expect(isBlockedAddress("93.184.216.34")).toBe(false);
   });
+
+  it("blocks IPv4-mapped IPv6 addresses that embed a blocked IPv4 address (dotted form)", () => {
+    expect(isBlockedAddress("::ffff:169.254.169.254")).toBe(true);
+    expect(isBlockedAddress("::ffff:127.0.0.1")).toBe(true);
+  });
+
+  it("blocks IPv4-mapped IPv6 addresses that embed a blocked IPv4 address (hex-grouped form)", () => {
+    expect(isBlockedAddress("::ffff:a9fe:a9fe")).toBe(true);
+  });
+
+  it("blocks legacy IPv4-compatible IPv6 addresses that embed a blocked IPv4 address", () => {
+    expect(isBlockedAddress("::10.0.0.1")).toBe(true);
+    expect(isBlockedAddress("::192.168.1.1")).toBe(true);
+  });
+
+  it("allows an IPv4-mapped IPv6 address that embeds a public IPv4 address", () => {
+    expect(isBlockedAddress("::ffff:8.8.8.8")).toBe(false);
+  });
+
+  it("allows a genuine public IPv6 address", () => {
+    expect(isBlockedAddress("2606:4700:4700::1111")).toBe(false);
+  });
 });
 
 describe("assertSafeFetchUrl", () => {
@@ -46,6 +68,18 @@ describe("assertSafeFetchUrl", () => {
   it("resolves without throwing for a hostname whose DNS lookup returns a public address", async () => {
     const lookup = vi.fn(async () => [{ address: "93.184.216.34" }]);
     await expect(assertSafeFetchUrl("http://example.com/x", { lookup })).resolves.toBeUndefined();
+  });
+
+  it("rejects an IPv4-mapped IPv6 literal for the AWS/GCP metadata address", async () => {
+    await expect(assertSafeFetchUrl("http://[::ffff:169.254.169.254]/latest/meta-data/")).rejects.toThrow(
+      /unsafe|blocked/i,
+    );
+  });
+
+  it("rejects a trailing-dot hostname via string normalization, before any DNS lookup", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34" }]);
+    await expect(assertSafeFetchUrl("http://localhost./", { lookup })).rejects.toThrow(/unsafe|blocked/i);
+    expect(lookup).not.toHaveBeenCalled();
   });
 });
 
