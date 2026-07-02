@@ -6,12 +6,15 @@ import { registerWriteTools } from "./write.js";
 import { registerAvatarTools } from "./avatar.js";
 import { registerSkillTools } from "./skills.js";
 import { registerLifecycleTools } from "./lifecycle.js";
+import { registerWorkspaceTools } from "./workspace.js";
 import { WorkOSSessionProvider } from "../auth/token-provider.js";
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
-  // connect/submit_code require the WorkOS provider; register them only then.
+  // connect/submit_code/set_workspace/list_workspaces require the WorkOS
+  // provider (StaticTokenProvider has a fixed workspace and no setWorkspace).
   if (ctx.provider instanceof WorkOSSessionProvider) {
     registerAuthTools(server, { provider: ctx.provider });
+    registerWorkspaceTools(server, { provider: ctx.provider, client: ctx.client });
   }
   registerReadTools(server, ctx);
   registerWriteTools(server, ctx);
