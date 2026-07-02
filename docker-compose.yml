@@ -1,0 +1,17 @@
+services:
+  diaflow-teammate-mcp:
+    build: .
+    image: diaflow-teammate-mcp
+    restart: unless-stopped
+    # Loads DIAFLOW_API_BASE, MCP_PUBLIC_URL, MCP_INBOUND_TOKEN, DIAFLOW_TOKEN,
+    # DIAFLOW_WORKSPACE_ID from a local .env (copy .env.production.example → .env).
+    env_file:
+      - .env
+    environment:
+      # Transport + port are fixed for a container deploy; the app also honors $PORT.
+      MCP_TRANSPORT: http
+      MCP_HTTP_PORT: "8787"
+    ports:
+      - "8787:8787"
+    # Terminate TLS in front of this (reverse proxy / platform ingress) — Diaflow
+    # requires the public MCP_PUBLIC_URL to be https://.

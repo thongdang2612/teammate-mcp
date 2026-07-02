@@ -12,7 +12,8 @@
     "test": "vitest run",
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "start": "node dist/src/index.js"
   },
   "keywords": [],
   "author": "",

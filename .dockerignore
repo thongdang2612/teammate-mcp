@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.production.example
+tests
+docs
+diaflow-backend
+diaflow-expo
+.worktrees
+*.log
+.DS_Store

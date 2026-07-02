@@ -35,4 +35,14 @@ describe("loadConfig", () => {
     expect(cfg.httpPort).toBe(8787);
     expect(cfg.transport).toBe("stdio");
   });
+
+  it("uses PORT over MCP_HTTP_PORT when the host injects it", () => {
+    const cfg = loadConfig({ DIAFLOW_API_BASE: "https://x", MCP_HTTP_PORT: "8787", PORT: "3000" } as any);
+    expect(cfg.httpPort).toBe(3000);
+  });
+
+  it("falls back to MCP_HTTP_PORT when PORT is empty/unset", () => {
+    const cfg = loadConfig({ DIAFLOW_API_BASE: "https://x", MCP_HTTP_PORT: "9001", PORT: "" } as any);
+    expect(cfg.httpPort).toBe(9001);
+  });
 });
