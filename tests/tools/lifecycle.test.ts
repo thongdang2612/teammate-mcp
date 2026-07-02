@@ -8,6 +8,33 @@ function fakeServer() {
 }
 
 describe("lifecycle tools", () => {
+  it("publish_teammate calls teammates.publish", async () => {
+    const teammates = { publish: vi.fn(async () => ({ uniqueId: "u1", status: "published" })) };
+    const { server, tools } = fakeServer();
+    registerLifecycleTools(server as any, { teammates } as any);
+    const res = await tools["publish_teammate"]({ teammateId: "u1" });
+    expect(teammates.publish).toHaveBeenCalledWith("u1");
+    expect(res.content[0].text).toContain("published");
+  });
+
+  it("offboard_teammate calls teammates.offboard", async () => {
+    const teammates = { offboard: vi.fn(async () => ({ uniqueId: "u1", status: "offboarded" })) };
+    const { server, tools } = fakeServer();
+    registerLifecycleTools(server as any, { teammates } as any);
+    const res = await tools["offboard_teammate"]({ teammateId: "u1" });
+    expect(teammates.offboard).toHaveBeenCalledWith("u1");
+    expect(res.content[0].text).toContain("offboarded");
+  });
+
+  it("rehire_teammate calls teammates.rehire", async () => {
+    const teammates = { rehire: vi.fn(async () => ({ uniqueId: "u1", status: "active" })) };
+    const { server, tools } = fakeServer();
+    registerLifecycleTools(server as any, { teammates } as any);
+    const res = await tools["rehire_teammate"]({ teammateId: "u1" });
+    expect(teammates.rehire).toHaveBeenCalledWith("u1");
+    expect(res.content[0].text).toContain("active");
+  });
+
   it("delete_teammate without force calls permanentDelete once", async () => {
     const teammates = { permanentDelete: vi.fn(async () => {}), offboard: vi.fn() };
     const { server, tools } = fakeServer();

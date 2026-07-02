@@ -25,4 +25,22 @@ describe("workspace tools", () => {
     const res = await tools["list_workspaces"]({});
     expect(res.content[0].text.toLowerCase()).toContain("not");
   });
+
+  it("list_workspaces returns the workspace list on success", async () => {
+    const provider = { getWorkspaceId: () => 7 };
+    const client = { request: vi.fn(async () => ({ results: [{ id: 7, name: "Acme" }] })) };
+    const { server, tools } = fakeServer();
+    registerWorkspaceTools(server as any, { provider, client } as any);
+    const res = await tools["list_workspaces"]({});
+    expect(client.request).toHaveBeenCalledWith("GET", "/workspaces");
+    expect(res.content[0].text).toContain("Acme");
+  });
+
+  it("list_workspaces propagates non-404/405 errors", async () => {
+    const provider = { getWorkspaceId: () => 7 };
+    const client = { request: vi.fn(async () => { throw new DiaflowHttpError(500, "boom"); }) };
+    const { server, tools } = fakeServer();
+    registerWorkspaceTools(server as any, { provider, client } as any);
+    await expect(tools["list_workspaces"]({})).rejects.toThrow(DiaflowHttpError);
+  });
 });

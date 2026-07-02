@@ -29,4 +29,19 @@ describe("magic-auth", () => {
     expect(h.get("authorization")).toBe("Bearer OLD");
     expect(r).toEqual({ session: "gAAAA_SEAL2", workspaceId: 999 });
   });
+
+  it("verifyMagicCode throws a DiaflowHttpError with the server's message on a non-2xx response", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "invalid_code", message: "code expired" }), { status: 400, headers: { "content-type": "application/json" } }));
+    await expect(verifyMagicCode("https://x", "a@b.com", "000000", fetchImpl as any)).rejects.toMatchObject({ status: 400, code: "invalid_code", message: "code expired" });
+  });
+
+  it("verifyMagicCode throws when the response has no session seal", async () => {
+    const fetchImpl = vi.fn(async () => ok({ workspaceId: null }));
+    await expect(verifyMagicCode("https://x", "a@b.com", "123456", fetchImpl as any)).rejects.toThrow(/session seal/);
+  });
+
+  it("nativePost falls back to a generic HTTP message on a non-JSON error body", async () => {
+    const fetchImpl = vi.fn(async () => new Response("plain text error", { status: 500 }));
+    await expect(sendMagicCode("https://x", "a@b.com", fetchImpl as any)).rejects.toMatchObject({ status: 500, message: "HTTP 500" });
+  });
 });

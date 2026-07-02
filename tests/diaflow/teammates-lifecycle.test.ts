@@ -6,6 +6,20 @@ const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200, header
 const client = (f: any) => new DiaflowClient({ baseUrl: "https://x", getToken: async () => "t", getWorkspaceId: () => 1, fetchImpl: f });
 
 describe("TeammatesApi lifecycle", () => {
+  it("publish posts to /publish", async () => {
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => ok({ uniqueId: "u1", status: "published" }));
+    await new TeammatesApi(client(f)).publish("u1");
+    expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agents/u1/publish");
+    expect((f.mock.calls[0][1] as RequestInit).method).toBe("POST");
+  });
+
+  it("rehire posts to /rehire", async () => {
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => ok({ uniqueId: "u1", status: "active" }));
+    await new TeammatesApi(client(f)).rehire("u1");
+    expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agents/u1/rehire");
+    expect((f.mock.calls[0][1] as RequestInit).method).toBe("POST");
+  });
+
   it("offboard posts to /offboard", async () => {
     const f = vi.fn(async (_url?: string, _init?: RequestInit) => ok({ uniqueId: "u1", status: "offboarded" }));
     await new TeammatesApi(client(f)).offboard("u1");

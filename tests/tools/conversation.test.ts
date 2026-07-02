@@ -26,4 +26,30 @@ describe("conversation tools", () => {
     expect(uploadChatAttachment).toHaveBeenCalledTimes(1);
     expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ files: [{ filename: "a.png", path: "k", artifact_url: "u" }] }));
   });
+
+  it("list_conversations forwards filters", async () => {
+    const conversations = { listSessions: vi.fn(async () => ({ results: [{ sessionId: "s1" }] })) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any } as any);
+    const res = await tools["list_conversations"]({ agentId: "u1", page: 1 });
+    expect(conversations.listSessions).toHaveBeenCalledWith({ agentId: "u1", page: 1, pageSize: undefined });
+    expect(res.content[0].text).toContain("s1");
+  });
+
+  it("get_conversation fetches history by sessionId", async () => {
+    const conversations = { getHistory: vi.fn(async () => ({ messages: [] })) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any } as any);
+    await tools["get_conversation"]({ sessionId: "s1", limit: 10 });
+    expect(conversations.getHistory).toHaveBeenCalledWith("s1", { limit: 10 });
+  });
+
+  it("stop_conversation stops the session and reports success", async () => {
+    const conversations = { stop: vi.fn(async () => {}) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any } as any);
+    const res = await tools["stop_conversation"]({ sessionId: "s1" });
+    expect(conversations.stop).toHaveBeenCalledWith("s1");
+    expect(res.content[0].text).toContain("stopped");
+  });
 });

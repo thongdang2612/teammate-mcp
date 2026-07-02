@@ -23,4 +23,13 @@ describe("write tools", () => {
     await tools["update_teammate"]({ teammateId: "u1", name: "B" });
     expect(teammates.update).toHaveBeenCalledWith("u1", { name: "B" });
   });
+
+  it("check_teammate_name forwards the name and reports duplicate status", async () => {
+    const teammates = { checkName: vi.fn(async () => ({ isDuplicate: true })) };
+    const { server, tools } = fakeServer();
+    registerWriteTools(server as any, { teammates } as any);
+    const res = await tools["check_teammate_name"]({ name: "Aria" });
+    expect(teammates.checkName).toHaveBeenCalledWith("Aria");
+    expect(res.content[0].text).toContain("true");
+  });
 });

@@ -40,4 +40,30 @@ The MCP is a client of the Diaflow backend and must authenticate the same way th
 
 ## Status
 
-Brainstorming/spec phase. The MCP's own build/lint/test/run commands, tool inventory, and directory layout should be added to this file once the server is scaffolded. Until then, there are no commands to run at this workspace root — use each reference repo's own commands (in its `CLAUDE.md`) when exploring inside it.
+Feature-complete and covered by tests. The MCP server lives at the repo root under `src/` (tests under `tests/`, mirroring the same layout). See `README.md` for full install/configure/run docs and the complete tool inventory — this section only covers what a contributor working inside this repo needs.
+
+### Commands
+
+```bash
+npm test               # vitest run — unit tests, mocked fetch/DiaflowClient, no live backend needed
+npm test -- --coverage # same, with a v8 coverage report (src/index.ts excluded — see below)
+npm run build           # tsc type-check + compile to dist/
+npm run dev              # tsx src/index.ts (stdio transport by default; MCP_TRANSPORT=http npm run dev for HTTP)
+```
+
+### Architecture / auth-flow summary
+
+`src/index.ts` reads `.env` via `src/config.ts` (Zod-validated) and picks a transport: **stdio** connects one `McpServer` directly, **http** starts an Express app serving Streamable HTTP at `/mcp` and builds one isolated `McpServer` + `ToolContext` per `Mcp-Session-Id`. `src/tools/context.ts` (`buildContext`) wires a `TokenProvider` — either the interactive `WorkOSSessionProvider` (magic-code login via `src/auth/magic-auth.ts`, session cached via `SessionStore`) or, when `DIAFLOW_TOKEN` is set, a fixed `StaticTokenProvider` for non-interactive/service deployments — into a `DiaflowClient` (`src/diaflow/client.ts`, adds auth/workspace headers, parses Diaflow's `{code,message}` error envelope into `DiaflowHttpError`, and re-persists any rotated session seal from `X-Diaflow-Session`). `src/tools/register.ts` then registers all tool groups (auth, read, write, avatar, skills, lifecycle, workspace, conversation, sub-agents, integration) against that context — auth/workspace tools are skipped entirely under `StaticTokenProvider`, since there's no login/workspace-switch to do. Avatars and chat attachments both go through a two-step S3 presign-then-PUT upload (`src/diaflow/upload.ts`) before the resulting key is persisted onto the resource.
+
+### Tool inventory
+
+See the **Tool inventory** section of `README.md` for the full, grouped list (auth / read / write / avatar / skills / lifecycle / workspace / conversation / sub-agents / integration) — tool names there are verified against `src/tools/*.ts`.
+
+### Known hardening follow-ups
+
+Not blocking, but worth fixing before hardening this for a hostile/public deployment:
+
+- **HTTP session map leak.** `src/index.ts`'s `startHttpServer` builds a brand-new `McpServer`/`ToolContext` for any POST to `/mcp` that lacks a known `Mcp-Session-Id` — including malformed or non-`initialize` requests — and only cleans up on `transport.onclose`. In open/no-token mode (`MCP_INBOUND_TOKEN` unset) this is an easy memory-exhaustion vector.
+- **Non-constant-time inbound token check.** `src/auth/inbound-auth.ts`'s `isInboundAuthorized` compares the bearer token with `===`, not a timing-safe comparison — a theoretical timing side-channel on `MCP_INBOUND_TOKEN`.
+- **No idle-session TTL sweep.** HTTP sessions in `src/index.ts`'s `sessions` map are only removed on transport close; a client that opens a session and goes silent (no clean disconnect) leaves it (and its `WorkOSSessionProvider`) resident indefinitely.
+- **No SSRF guard on fetched URLs.** `uploadRemoteImage` and `uploadChatAttachment` (`src/diaflow/upload.ts`) `fetch()` whatever URL the caller supplies (avatar image URL / chat attachment URL) with no allowlist or private-IP/metadata-endpoint check before downloading and re-uploading it.

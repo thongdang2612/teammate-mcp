@@ -58,4 +58,26 @@ describe("DiaflowClient", () => {
       code: "permanent_delete_conflict",
     } satisfies Partial<DiaflowHttpError>);
   });
+
+  it("treats a non-JSON body as opaque text instead of throwing on parse", async () => {
+    const fetchImpl = vi.fn(async () => new Response("not json", { status: 200, headers: { "content-type": "text/plain" } }));
+    const client = new DiaflowClient({ baseUrl: "https://x", getToken: async () => "t", getWorkspaceId: () => 1, fetchImpl: fetchImpl as any });
+    const data = await client.request<string>("GET", "/agents");
+    expect(data).toBe("not json");
+  });
+
+  it("falls back to a generic HTTP message when the error body has no code/message/detail", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ unrelated: true }, { status: 503 }));
+    const client = new DiaflowClient({ baseUrl: "https://x", getToken: async () => "t", getWorkspaceId: () => 1, fetchImpl: fetchImpl as any });
+    await expect(client.request("GET", "/agents")).rejects.toMatchObject({ status: 503, message: "HTTP 503", code: undefined });
+  });
+
+  it("returns undefined without reading a body on 204", async () => {
+    const fetchImpl = vi.fn(async (_url?: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+    const client = new DiaflowClient({ baseUrl: "https://x", getToken: async () => null, getWorkspaceId: () => null, fetchImpl: fetchImpl as any });
+    const data = await client.request("DELETE", "/agents/u1");
+    expect(data).toBeUndefined();
+    const headers = new Headers((fetchImpl.mock.calls[0][1] as RequestInit).headers);
+    expect(headers.has("authorization")).toBe(false);
+  });
 });

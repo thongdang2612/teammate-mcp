@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { DiaflowClient } from "../../src/diaflow/client.js";
-import { presignUpload, putToPresigned, uploadRemoteImage } from "../../src/diaflow/upload.js";
+import { presignUpload, putToPresigned, uploadRemoteImage, uploadChatAttachment } from "../../src/diaflow/upload.js";
 
 const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
 const client = (f: any) => new DiaflowClient({ baseUrl: "https://x", getToken: async () => "t", getWorkspaceId: () => 1, fetchImpl: f });
@@ -63,5 +63,32 @@ describe("upload", () => {
     ).rejects.toThrow(/size/i);
     expect(f).toHaveBeenCalledTimes(1);
     expect(f.mock.calls[0][0]).toBe("https://remote/huge.png");
+  });
+
+  it("uploadChatAttachment downloads, presigns, PUTs, and returns a FileRef", async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const f = vi.fn(async (url: string) => {
+      if (url === "https://remote/report.pdf") return new Response(bytes, { status: 200, headers: { "content-type": "application/pdf" } });
+      if (url.endsWith("/drives/s3/presigned")) return ok({ uploadUrl: "https://s3/put", key: "agent-workspace/T1/uploads/02-07-26/report.pdf", url: "https://cdn/report.pdf" });
+      if (url === "https://s3/put") return new Response(null, { status: 200 });
+      throw new Error("unexpected " + url);
+    });
+    const r = await uploadChatAttachment(client(f), { url: "https://remote/report.pdf", threadId: "T1", date: new Date(Date.UTC(2026, 6, 2)), fetchImpl: f as any });
+    expect(r).toEqual({ filename: "report.pdf", path: "agent-workspace/T1/uploads/02-07-26/report.pdf", size: 3, artifact_url: "https://cdn/report.pdf" });
+  });
+
+  it("uploadChatAttachment rejects attachments over the size cap", async () => {
+    const big = new Uint8Array(26 * 1024 * 1024);
+    const f = vi.fn(async () => new Response(big, { status: 200, headers: { "content-type": "application/pdf" } }));
+    await expect(
+      uploadChatAttachment(client(f), { url: "https://remote/big.pdf", date: new Date(), fetchImpl: f as any }),
+    ).rejects.toThrow(/size/i);
+  });
+
+  it("uploadChatAttachment throws when the download fails", async () => {
+    const f = vi.fn(async () => new Response("nope", { status: 404 }));
+    await expect(
+      uploadChatAttachment(client(f), { url: "https://remote/missing.pdf", date: new Date(), fetchImpl: f as any }),
+    ).rejects.toThrow(/404/);
   });
 });

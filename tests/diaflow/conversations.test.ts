@@ -34,4 +34,17 @@ describe("ConversationsApi", () => {
     expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agent-runtime/sessions/T1/stop");
     expect((f.mock.calls[0][1] as RequestInit).method).toBe("POST");
   });
+
+  it("listSessions queries the sessions endpoint with filters", async () => {
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => ok({ results: [{ sessionId: "T1" }] }));
+    const r = await new ConversationsApi(client(f)).listSessions({ agentId: "u1", page: 2, pageSize: 10 });
+    expect(r).toEqual({ results: [{ sessionId: "T1" }] });
+    expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agent-runtime/sessions?agent_id=u1&page=2&pageSize=10");
+  });
+
+  it("getHistory queries the history endpoint with a default limit", async () => {
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => ok({ messages: [] }));
+    await new ConversationsApi(client(f)).getHistory("T1");
+    expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agent-runtime/sessions/T1/history?limit=50");
+  });
 });

@@ -24,4 +24,21 @@ describe("auth tools", () => {
     expect(provider.completeConnect).toHaveBeenCalledWith("a@b.com", "123456");
     expect(res.content[0].text).toContain("1564");
   });
+
+  it("auth_status reports connected with the active workspace", async () => {
+    const provider = { isConnected: vi.fn(async () => true), getWorkspaceId: () => 1564 };
+    const { server, tools } = fakeServer();
+    registerAuthTools(server as any, { provider } as any);
+    const res = await tools["auth_status"]({});
+    expect(res.content[0].text).toContain("Connected");
+    expect(res.content[0].text).toContain("1564");
+  });
+
+  it("auth_status reports not connected", async () => {
+    const provider = { isConnected: vi.fn(async () => false), getWorkspaceId: () => null };
+    const { server, tools } = fakeServer();
+    registerAuthTools(server as any, { provider } as any);
+    const res = await tools["auth_status"]({});
+    expect(res.content[0].text).toContain("Not connected");
+  });
 });
