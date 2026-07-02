@@ -21,6 +21,22 @@ describe("integration tools", () => {
     expect(res.content[0].text.toLowerCase()).toContain("https");
   });
 
+  it("register_self_as_custom_mcp refuses to register when no inbound token is configured", async () => {
+    const registerCustomMcp = vi.fn();
+    const { server, tools } = fakeServer();
+    registerIntegrationTools(server as any, {
+      client: {} as any,
+      provider: { getWorkspaceId: () => 1564 } as any,
+      publicUrl: "https://m.example.com/mcp",
+      inboundToken: undefined,
+      registerCustomMcp,
+    } as any);
+    const res = await tools["register_self_as_custom_mcp"]({});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text.toLowerCase()).toContain("mcp_inbound_token");
+    expect(registerCustomMcp).not.toHaveBeenCalled();
+  });
+
   it("register_self_as_custom_mcp registers with the public url + inbound token", async () => {
     const registerCustomMcp = vi.fn(async () => ({ resourceId: 9, created: true }));
     const { server, tools } = fakeServer();

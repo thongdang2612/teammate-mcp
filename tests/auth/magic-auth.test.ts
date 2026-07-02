@@ -40,6 +40,18 @@ describe("magic-auth", () => {
     await expect(verifyMagicCode("https://x", "a@b.com", "123456", fetchImpl as any)).rejects.toThrow(/session seal/);
   });
 
+  it("selectWorkspace prefers a rotated session header over the body's session field", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ session: "BODY_SEAL", workspaceId: 999 }), {
+          status: 200,
+          headers: { "content-type": "application/json", "x-diaflow-session": "ROTATED_SEAL" },
+        }),
+    );
+    const r = await selectWorkspace("https://x", "OLD", 999, fetchImpl as any);
+    expect(r).toEqual({ session: "ROTATED_SEAL", workspaceId: 999 });
+  });
+
   it("nativePost falls back to a generic HTTP message on a non-JSON error body", async () => {
     const fetchImpl = vi.fn(async () => new Response("plain text error", { status: 500 }));
     await expect(sendMagicCode("https://x", "a@b.com", fetchImpl as any)).rejects.toMatchObject({ status: 500, message: "HTTP 500" });

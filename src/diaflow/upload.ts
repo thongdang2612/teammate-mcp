@@ -2,6 +2,7 @@ import type { DiaflowClient } from "./client.js";
 import type { FileRef, PresignResponse } from "./types.js";
 import { slugify } from "../utils/slug.js";
 import { buildAgentUploadPath, buildModulePath } from "../utils/upload-paths.js";
+import { assertSafeFetchUrl } from "./url-guard.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_CHAT_BYTES = 25 * 1024 * 1024;
@@ -42,7 +43,10 @@ export async function uploadRemoteImage(
   const fetchImpl = params.fetchImpl ?? fetch;
   const maxBytes = params.maxBytes ?? MAX_BYTES;
 
-  const dl = await fetchImpl(params.imageUrl);
+  await assertSafeFetchUrl(params.imageUrl);
+  // Note: residual DNS-rebinding TOCTOU between the check above and the fetch below is a
+  // known limitation; `redirect: "error"` at least prevents a same-request 3xx bypass.
+  const dl = await fetchImpl(params.imageUrl, { redirect: "error" });
   if (!dl.ok) throw new Error(`failed to download image: HTTP ${dl.status}`);
   const declaredLen = Number(dl.headers.get("content-length"));
   if (Number.isFinite(declaredLen) && declaredLen > maxBytes) {
@@ -65,7 +69,10 @@ export async function uploadChatAttachment(
 ): Promise<FileRef> {
   const fetchImpl = params.fetchImpl ?? fetch;
   const maxBytes = params.maxBytes ?? MAX_CHAT_BYTES;
-  const dl = await fetchImpl(params.url);
+  await assertSafeFetchUrl(params.url);
+  // Note: residual DNS-rebinding TOCTOU between the check above and the fetch below is a
+  // known limitation; `redirect: "error"` at least prevents a same-request 3xx bypass.
+  const dl = await fetchImpl(params.url, { redirect: "error" });
   if (!dl.ok) throw new Error(`failed to download attachment: HTTP ${dl.status}`);
   const contentType = dl.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
   const buf = new Uint8Array(await dl.arrayBuffer());

@@ -30,6 +30,7 @@ export function registerIntegrationTools(server: McpServer, deps: IntegrationDep
       const ws = deps.provider.getWorkspaceId();
       if (ws == null) return errText("No active workspace. Connect and/or set_workspace first.");
       if (!deps.publicUrl || !deps.publicUrl.startsWith("https://")) return errText("MCP_PUBLIC_URL must be a public https:// URL ending in /mcp (Diaflow rejects http/localhost/private).");
+      if (!deps.inboundToken) return errText("Refusing to register an unauthenticated public MCP endpoint. Set MCP_INBOUND_TOKEN first, then retry.");
       const r = await register(deps.client, ws, { url: deps.publicUrl, name: args.name ?? "Diaflow Teammate MCP", key: deps.inboundToken });
       return asText(r);
     },

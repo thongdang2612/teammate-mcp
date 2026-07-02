@@ -20,4 +20,12 @@ describe("isInboundAuthorized", () => {
     expect(isInboundAuthorized("Bearer wrong-token", "secret-token")).toBe(false);
     expect(isInboundAuthorized("secret-token", "secret-token")).toBe(false);
   });
+
+  it("authorizes using a constant-time comparison for a matching token", () => {
+    expect(isInboundAuthorized("Bearer secret-token", "secret-token")).toBe(true);
+  });
+
+  it("rejects a wrong token of the same length as the expected token", () => {
+    expect(isInboundAuthorized("Bearer secret-tokeX", "secret-token")).toBe(false);
+  });
 });

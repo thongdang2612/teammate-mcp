@@ -33,12 +33,12 @@ export async function selectWorkspace(
   workspaceId: number,
   fetchImpl?: typeof fetch,
 ): Promise<{ session: string; workspaceId: number }> {
-  const { data } = await nativePost<WorkspaceSelectPayload>(
+  const { data, rotated } = await nativePost<WorkspaceSelectPayload>(
     baseUrl,
     "/auth/workspace/select",
     { workspaceId },
     { bearer: seal, fetchImpl },
   );
-  const session = data.session ?? seal;
+  const session = rotated ?? data.session ?? seal;
   return { session, workspaceId: data.workspaceId ?? workspaceId };
 }

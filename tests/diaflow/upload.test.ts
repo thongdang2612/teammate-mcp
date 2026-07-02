@@ -33,12 +33,12 @@ describe("upload", () => {
   it("uploadRemoteImage downloads, presigns, PUTs, returns key", async () => {
     const png = new Uint8Array([137, 80, 78, 71]);
     const f = vi.fn(async (url: string) => {
-      if (url === "https://remote/a.png") return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+      if (url === "https://93.184.216.34/a.png") return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
       if (url.endsWith("/drives/s3/presigned")) return ok({ uploadUrl: "https://s3/put", key: "agent-teammate-icons/02-07-26/u1_a.png", url: "https://cdn/k" });
       if (url === "https://s3/put") return new Response(null, { status: 200 });
       throw new Error("unexpected " + url);
     });
-    const r = await uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://remote/a.png", date: new Date(Date.UTC(2026, 6, 2)), fetchImpl: f as any });
+    const r = await uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://93.184.216.34/a.png", date: new Date(Date.UTC(2026, 6, 2)), fetchImpl: f as any });
     expect(r.key).toBe("agent-teammate-icons/02-07-26/u1_a.png");
   });
 
@@ -46,7 +46,7 @@ describe("upload", () => {
     const big = new Uint8Array(11 * 1024 * 1024);
     const f = vi.fn(async () => new Response(big, { status: 200, headers: { "content-type": "image/png" } }));
     await expect(
-      uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://remote/big.png", date: new Date(), fetchImpl: f as any }),
+      uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://93.184.216.34/big.png", date: new Date(), fetchImpl: f as any }),
     ).rejects.toThrow(/size/i);
   });
 
@@ -59,21 +59,21 @@ describe("upload", () => {
       }),
     );
     await expect(
-      uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://remote/huge.png", date: new Date(), fetchImpl: f as any }),
+      uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://93.184.216.34/huge.png", date: new Date(), fetchImpl: f as any }),
     ).rejects.toThrow(/size/i);
     expect(f).toHaveBeenCalledTimes(1);
-    expect(f.mock.calls[0][0]).toBe("https://remote/huge.png");
+    expect(f.mock.calls[0][0]).toBe("https://93.184.216.34/huge.png");
   });
 
   it("uploadChatAttachment downloads, presigns, PUTs, and returns a FileRef", async () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const f = vi.fn(async (url: string) => {
-      if (url === "https://remote/report.pdf") return new Response(bytes, { status: 200, headers: { "content-type": "application/pdf" } });
+      if (url === "https://93.184.216.34/report.pdf") return new Response(bytes, { status: 200, headers: { "content-type": "application/pdf" } });
       if (url.endsWith("/drives/s3/presigned")) return ok({ uploadUrl: "https://s3/put", key: "agent-workspace/T1/uploads/02-07-26/report.pdf", url: "https://cdn/report.pdf" });
       if (url === "https://s3/put") return new Response(null, { status: 200 });
       throw new Error("unexpected " + url);
     });
-    const r = await uploadChatAttachment(client(f), { url: "https://remote/report.pdf", threadId: "T1", date: new Date(Date.UTC(2026, 6, 2)), fetchImpl: f as any });
+    const r = await uploadChatAttachment(client(f), { url: "https://93.184.216.34/report.pdf", threadId: "T1", date: new Date(Date.UTC(2026, 6, 2)), fetchImpl: f as any });
     expect(r).toEqual({ filename: "report.pdf", path: "agent-workspace/T1/uploads/02-07-26/report.pdf", size: 3, artifact_url: "https://cdn/report.pdf" });
   });
 
@@ -81,14 +81,14 @@ describe("upload", () => {
     const big = new Uint8Array(26 * 1024 * 1024);
     const f = vi.fn(async () => new Response(big, { status: 200, headers: { "content-type": "application/pdf" } }));
     await expect(
-      uploadChatAttachment(client(f), { url: "https://remote/big.pdf", date: new Date(), fetchImpl: f as any }),
+      uploadChatAttachment(client(f), { url: "https://93.184.216.34/big.pdf", date: new Date(), fetchImpl: f as any }),
     ).rejects.toThrow(/size/i);
   });
 
   it("uploadChatAttachment throws when the download fails", async () => {
     const f = vi.fn(async () => new Response("nope", { status: 404 }));
     await expect(
-      uploadChatAttachment(client(f), { url: "https://remote/missing.pdf", date: new Date(), fetchImpl: f as any }),
+      uploadChatAttachment(client(f), { url: "https://93.184.216.34/missing.pdf", date: new Date(), fetchImpl: f as any }),
     ).rejects.toThrow(/404/);
   });
 });
