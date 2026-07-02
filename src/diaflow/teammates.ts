@@ -41,4 +41,20 @@ export class TeammatesApi {
   checkName(name: string): Promise<{ isDuplicate: boolean }> {
     return this.client.request<{ isDuplicate: boolean }>("POST", "/agents/check-name", { body: { name } });
   }
+
+  publish(uniqueId: string): Promise<AgentDetail> {
+    return this.client.request<AgentDetail>("POST", `/agents/${encodeURIComponent(uniqueId)}/publish`);
+  }
+
+  offboard(uniqueId: string): Promise<AgentDetail> {
+    return this.client.request<AgentDetail>("POST", `/agents/${encodeURIComponent(uniqueId)}/offboard`);
+  }
+
+  rehire(uniqueId: string): Promise<AgentDetail> {
+    return this.client.request<AgentDetail>("POST", `/agents/${encodeURIComponent(uniqueId)}/rehire`);
+  }
+
+  permanentDelete(uniqueId: string): Promise<void> {
+    return this.client.request<void>("DELETE", `/agents/${encodeURIComponent(uniqueId)}/permanent`);
+  }
 }

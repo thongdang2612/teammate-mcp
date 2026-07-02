@@ -5,6 +5,7 @@ import { registerReadTools } from "./read.js";
 import { registerWriteTools } from "./write.js";
 import { registerAvatarTools } from "./avatar.js";
 import { registerSkillTools } from "./skills.js";
+import { registerLifecycleTools } from "./lifecycle.js";
 import { WorkOSSessionProvider } from "../auth/token-provider.js";
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
@@ -18,4 +19,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   // real Diaflow CDN host is confirmed (see spec §9 open question #4).
   registerAvatarTools(server, { teammates: ctx.teammates, client: ctx.client, presetHosts: [new URL(ctx.baseUrl).host] });
   registerSkillTools(server, { skills: ctx.skills });
+  registerLifecycleTools(server, ctx);
 }
