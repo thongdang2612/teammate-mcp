@@ -2,6 +2,7 @@ import type { AppConfig } from "../config.js";
 import { DiaflowClient } from "../diaflow/client.js";
 import { TeammatesApi } from "../diaflow/teammates.js";
 import { SkillsApi } from "../diaflow/skills.js";
+import { ConversationsApi } from "../diaflow/conversations.js";
 import { MemorySessionStore } from "../auth/session-store.js";
 import { WorkOSSessionProvider, StaticTokenProvider, type TokenProvider } from "../auth/token-provider.js";
 
@@ -10,6 +11,7 @@ export interface ToolContext {
   client: DiaflowClient;
   teammates: TeammatesApi;
   skills: SkillsApi;
+  conversations: ConversationsApi;
   baseUrl: string;
   publicUrl?: string;
   inboundToken?: string;
@@ -32,6 +34,7 @@ export function buildContext(cfg: AppConfig): ToolContext {
     client,
     teammates: new TeammatesApi(client),
     skills: new SkillsApi(client),
+    conversations: new ConversationsApi(client),
     baseUrl: cfg.diaflowApiBase,
     publicUrl: cfg.publicUrl,
     inboundToken: cfg.inboundToken,

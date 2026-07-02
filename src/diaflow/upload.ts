@@ -1,9 +1,10 @@
 import type { DiaflowClient } from "./client.js";
-import type { PresignResponse } from "./types.js";
+import type { FileRef, PresignResponse } from "./types.js";
 import { slugify } from "../utils/slug.js";
-import { buildModulePath } from "../utils/upload-paths.js";
+import { buildAgentUploadPath, buildModulePath } from "../utils/upload-paths.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_CHAT_BYTES = 25 * 1024 * 1024;
 const TEAMMATE_ICON_FOLDER = "agent-teammate-icons";
 
 export function presignUpload(
@@ -56,4 +57,23 @@ export async function uploadRemoteImage(
   const presigned = await presignUpload(client, { name: filename, type: contentType, folder, fileSize: buf.byteLength });
   await putToPresigned(presigned.uploadUrl, buf, contentType, fetchImpl);
   return { key: presigned.key, url: presigned.url };
+}
+
+export async function uploadChatAttachment(
+  client: DiaflowClient,
+  params: { url: string; threadId?: string; date: Date; fetchImpl?: typeof fetch; maxBytes?: number },
+): Promise<FileRef> {
+  const fetchImpl = params.fetchImpl ?? fetch;
+  const maxBytes = params.maxBytes ?? MAX_CHAT_BYTES;
+  const dl = await fetchImpl(params.url);
+  if (!dl.ok) throw new Error(`failed to download attachment: HTTP ${dl.status}`);
+  const contentType = dl.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
+  const buf = new Uint8Array(await dl.arrayBuffer());
+  if (buf.byteLength > maxBytes) throw new Error(`attachment size ${buf.byteLength} exceeds max ${maxBytes} bytes`);
+  const nameFromUrl = new URL(params.url).pathname.split("/").pop() || "file";
+  const filename = slugify(nameFromUrl) || "file";
+  const folder = buildAgentUploadPath(params.threadId, params.date);
+  const presigned = await presignUpload(client, { name: filename, type: contentType, folder, fileSize: buf.byteLength });
+  await putToPresigned(presigned.uploadUrl, buf, contentType, fetchImpl);
+  return { filename, path: presigned.key, size: buf.byteLength, artifact_url: presigned.url };
 }

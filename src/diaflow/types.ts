@@ -89,3 +89,16 @@ export interface SkillRef {
   skillSystemId?: number;
   skillUserId?: number;
 }
+
+export interface FileRef {
+  filename: string;
+  path: string;
+  size?: number;
+  artifact_url?: string;
+}
+
+export interface CompletionResult {
+  threadId: string;
+  reply: string;
+  usage?: { totalTokens?: number };
+}
