@@ -1,6 +1,7 @@
 import type { AppConfig } from "../config.js";
 import { DiaflowClient } from "../diaflow/client.js";
 import { TeammatesApi } from "../diaflow/teammates.js";
+import { SkillsApi } from "../diaflow/skills.js";
 import { MemorySessionStore } from "../auth/session-store.js";
 import { WorkOSSessionProvider, StaticTokenProvider, type TokenProvider } from "../auth/token-provider.js";
 
@@ -8,6 +9,7 @@ export interface ToolContext {
   provider: TokenProvider;
   client: DiaflowClient;
   teammates: TeammatesApi;
+  skills: SkillsApi;
   baseUrl: string;
 }
 
@@ -23,5 +25,5 @@ export function buildContext(cfg: AppConfig): ToolContext {
     onRotate: (seal) => provider.onRotate(seal),
   });
 
-  return { provider, client, teammates: new TeammatesApi(client), baseUrl: cfg.diaflowApiBase };
+  return { provider, client, teammates: new TeammatesApi(client), skills: new SkillsApi(client), baseUrl: cfg.diaflowApiBase };
 }
