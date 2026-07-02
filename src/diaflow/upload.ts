@@ -43,6 +43,10 @@ export async function uploadRemoteImage(
 
   const dl = await fetchImpl(params.imageUrl);
   if (!dl.ok) throw new Error(`failed to download image: HTTP ${dl.status}`);
+  const declaredLen = Number(dl.headers.get("content-length"));
+  if (Number.isFinite(declaredLen) && declaredLen > maxBytes) {
+    throw new Error(`remote image size ${declaredLen} exceeds max ${maxBytes} bytes`);
+  }
   const contentType = dl.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
   const buf = new Uint8Array(await dl.arrayBuffer());
   if (buf.byteLength > maxBytes) throw new Error(`image size ${buf.byteLength} exceeds max ${maxBytes} bytes`);

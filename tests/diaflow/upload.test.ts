@@ -49,4 +49,19 @@ describe("upload", () => {
       uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://remote/big.png", date: new Date(), fetchImpl: f as any }),
     ).rejects.toThrow(/size/i);
   });
+
+  it("uploadRemoteImage fails fast on oversize Content-Length without buffering or calling presign/S3", async () => {
+    const tinyBody = new Uint8Array([1, 2, 3]);
+    const f = vi.fn(async (_url?: string) =>
+      new Response(tinyBody, {
+        status: 200,
+        headers: { "content-type": "image/png", "content-length": String(11 * 1024 * 1024) },
+      }),
+    );
+    await expect(
+      uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://remote/huge.png", date: new Date(), fetchImpl: f as any }),
+    ).rejects.toThrow(/size/i);
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(f.mock.calls[0][0]).toBe("https://remote/huge.png");
+  });
 });
