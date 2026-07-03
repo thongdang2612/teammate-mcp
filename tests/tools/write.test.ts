@@ -7,13 +7,31 @@ function fakeServer() {
 }
 
 describe("write tools", () => {
-  it("create_teammate calls the api", async () => {
-    const teammates = { create: vi.fn(async () => ({ id: 1, uniqueId: "u1", name: "A" })) };
+  it("create_teammate creates then publishes by default, and does not pass the publish flag as a field", async () => {
+    const teammates = {
+      create: vi.fn(async () => ({ id: 1, uniqueId: "u1", name: "A", status: "draft" })),
+      publish: vi.fn(async () => ({ id: 1, uniqueId: "u1", name: "A", status: "publish" })),
+    };
     const { server, tools } = fakeServer();
     registerWriteTools(server as any, { teammates } as any);
     const res = await tools["create_teammate"]({ modelProvider: "openai", modelName: "gpt-4", name: "A" });
-    expect(teammates.create).toHaveBeenCalledWith(expect.objectContaining({ modelProvider: "openai", modelName: "gpt-4", name: "A" }));
-    expect(res.content[0].text).toContain("u1");
+    // `publish` is a control flag, not a teammate field — it must not leak into the create payload.
+    expect(teammates.create).toHaveBeenCalledWith({ modelProvider: "openai", modelName: "gpt-4", name: "A" });
+    expect(teammates.publish).toHaveBeenCalledWith("u1");
+    expect(res.content[0].text).toContain('"status": "publish"');
+  });
+
+  it("create_teammate with publish:false leaves the teammate as a draft (no publish call)", async () => {
+    const teammates = {
+      create: vi.fn(async () => ({ id: 1, uniqueId: "u1", name: "A", status: "draft" })),
+      publish: vi.fn(async () => ({ id: 1, uniqueId: "u1", name: "A", status: "publish" })),
+    };
+    const { server, tools } = fakeServer();
+    registerWriteTools(server as any, { teammates } as any);
+    const res = await tools["create_teammate"]({ modelProvider: "openai", modelName: "gpt-4", name: "A", publish: false });
+    expect(teammates.create).toHaveBeenCalledWith({ modelProvider: "openai", modelName: "gpt-4", name: "A" });
+    expect(teammates.publish).not.toHaveBeenCalled();
+    expect(res.content[0].text).toContain('"status": "draft"');
   });
 
   it("update_teammate strips teammateId out of the fields", async () => {

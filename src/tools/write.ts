@@ -11,7 +11,8 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
   server.registerTool(
     "create_teammate",
     {
-      description: "Create a new teammate. modelProvider and modelName are required.",
+      description:
+        "Create a new teammate. modelProvider and modelName are required. The teammate is PUBLISHED by default (immediately live); pass publish:false to leave it as an unpublished draft.",
       inputSchema: {
         modelProvider: z.string().min(1),
         modelName: z.string().min(1),
@@ -24,9 +25,16 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
         starterPrompts: z.array(starterPrompt).optional(),
         tags: z.array(z.string()).optional(),
         icon: z.string().optional(),
+        publish: z.boolean().optional().describe("Publish the teammate immediately after creation (default true). Set false to keep it a draft."),
       },
     },
-    async (args) => asText(await ctx.teammates.create(args)),
+    async (args) => {
+      const { publish, ...fields } = args;
+      const created = await ctx.teammates.create(fields);
+      // Diaflow creates teammates as drafts; publish by default so a created teammate is live.
+      if (publish === false) return asText(created);
+      return asText(await ctx.teammates.publish(created.uniqueId));
+    },
   );
 
   server.registerTool(
