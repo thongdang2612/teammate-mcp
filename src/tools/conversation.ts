@@ -54,10 +54,7 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       if (r.status === "working") {
         return asText({
           ...r,
-          teammateId: args.teammateId,
-          note: args.teammateId
-            ? `The teammate is still working. Call get_teammate_reply with teammateId "${args.teammateId}" (poll until status is "completed") to retrieve the result.`
-            : `The teammate is still working. Call get_teammate_reply with the target teammate's id (poll until status is "completed") to retrieve the result.`,
+          note: `The teammate is still working (threadId "${r.threadId}"). Call get_teammate_reply with threadId "${r.threadId}" and keep calling until status is "completed" — it waits server-side, so just call it again whenever it returns "working".`,
         });
       }
       return asText(r);
@@ -68,14 +65,16 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
     "get_teammate_reply",
     {
       description:
-        "Fetch the latest reply from a teammate after message_teammate returned status \"working\". " +
-        "Pass the same teammateId. Returns { status: \"completed\" | \"working\" | \"unknown\", reply? }. " +
-        "If \"working\", the target is still processing — call again shortly to poll until \"completed\".",
+        "Wait for and fetch a teammate's reply after message_teammate returned status \"working\". " +
+        "Pass the threadId from that response. Blocks server-side until the run reaches a terminal " +
+        "state or the wait budget elapses, then returns { status: \"completed\" | \"failed\" | " +
+        "\"interrupted\" | \"working\", reply?, error? }. If \"working\", the run is still going — " +
+        "call again with the same threadId (unlimited).",
       inputSchema: {
-        teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC + " Use the same teammateId you passed to message_teammate."),
+        threadId: z.string().min(1).describe("The threadId returned by message_teammate for this run."),
       },
     },
-    async (args) => asText(await deps.conversations.getLatestReply(args.teammateId)),
+    async (args) => asText(await deps.conversations.waitForReply(args.threadId)),
   );
 
   server.registerTool(
