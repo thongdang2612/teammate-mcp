@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import express, { type Express, type Request } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { loadConfig, type AppConfig } from "./config.js";
 import { buildContext, type ToolContext } from "./tools/context.js";
 import { buildServer } from "./server.js";
@@ -24,6 +24,16 @@ async function main(): Promise<void> {
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   lastSeen: number;
+  /**
+   * The access token (`req.auth?.token`) of the request that created this session — `undefined`
+   * in static mode. Every reuse of an existing session must present this same token, otherwise
+   * one oauth user could hijack another user's session by guessing/observing its
+   * `Mcp-Session-Id` and pairing it with their own (otherwise valid) token. Bound to the token
+   * rather than the underlying Diaflow seal because the token survives seal rotation (rotation
+   * just updates the token store's record; the token string itself doesn't change), and once the
+   * token itself expires the client has to re-initialize anyway.
+   */
+  identityKey?: string;
 }
 
 /** Per-request seal identity, resolved from the authenticated caller (oauth mode) or absent (static mode). */
@@ -40,6 +50,23 @@ function isInitializePost(body: unknown): boolean {
 }
 
 /**
+ * True when `entry` was created under a different identity than the caller now presents.
+ * `identityKey === undefined` means static mode (no per-request identity at all) — the check is
+ * always skipped there, leaving static behavior unchanged.
+ */
+function sessionIdentityMismatch(entry: SessionEntry, req: Request): boolean {
+  return entry.identityKey !== undefined && entry.identityKey !== req.auth?.token;
+}
+
+function rejectSessionIdentityMismatch(res: Response): void {
+  res.status(401).json({
+    jsonrpc: "2.0",
+    error: { code: -32001, message: "Unauthorized: session does not belong to this token" },
+    id: null,
+  });
+}
+
+/**
  * Mounts POST/GET/DELETE /mcp: one MCP server + isolated ToolContext (and thus one isolated
  * TokenProvider) per session id. `identityFor` resolves the per-request seal identity to build
  * that ToolContext with — `undefined` in static mode, `{ seal, workspaceId, onRotate }` in oauth
@@ -53,6 +80,10 @@ function mountMcp(app: Express, cfg: AppConfig, identityFor: (req: Request) => S
     const entry = sessionId ? sessions.get(sessionId) : undefined;
 
     if (entry) {
+      if (sessionIdentityMismatch(entry, req)) {
+        rejectSessionIdentityMismatch(res);
+        return;
+      }
       entry.lastSeen = Date.now();
       await entry.transport.handleRequest(req, res, req.body);
       return;
@@ -74,7 +105,7 @@ function mountMcp(app: Express, cfg: AppConfig, identityFor: (req: Request) => S
     const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (id: string): void => {
-        sessions.set(id, { transport, lastSeen: Date.now() });
+        sessions.set(id, { transport, lastSeen: Date.now(), identityKey: req.auth?.token });
       },
     });
     transport.onclose = () => {
@@ -91,6 +122,10 @@ function mountMcp(app: Express, cfg: AppConfig, identityFor: (req: Request) => S
       res.status(400).end();
       return;
     }
+    if (sessionIdentityMismatch(entry, req)) {
+      rejectSessionIdentityMismatch(res);
+      return;
+    }
     entry.lastSeen = Date.now();
     await entry.transport.handleRequest(req, res);
   });
@@ -100,6 +135,10 @@ function mountMcp(app: Express, cfg: AppConfig, identityFor: (req: Request) => S
     const entry = sessionId ? sessions.get(sessionId) : undefined;
     if (!entry) {
       res.status(400).end();
+      return;
+    }
+    if (sessionIdentityMismatch(entry, req)) {
+      rejectSessionIdentityMismatch(res);
       return;
     }
     await entry.transport.handleRequest(req, res);

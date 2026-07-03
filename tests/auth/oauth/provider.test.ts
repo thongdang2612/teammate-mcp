@@ -43,12 +43,24 @@ describe("DiaflowOAuthProvider", () => {
     expect(info.extra?.seal).toBe("s");
   });
 
-  it("verifyAccessToken rejects unknown tokens; revokeToken invalidates", async () => {
+  it("verifyAccessToken rejects unknown tokens; revokeToken invalidates for the owning client", async () => {
     const { store, provider, client } = setup();
     await expect(provider.verifyAccessToken("bogus")).rejects.toBeInstanceOf(InvalidTokenError);
     const code = store.createAuthCode({ seal: "s", workspaceId: null, clientId: client.client_id, redirectUri: "https://cb", codeChallenge: "ch", scopes: [] });
     const t = await provider.exchangeAuthorizationCode(client, code, undefined, "https://cb");
     await provider.revokeToken(client, { token: t.access_token });
     await expect(provider.verifyAccessToken(t.access_token)).rejects.toBeInstanceOf(InvalidTokenError);
+  });
+
+  it("revokeToken no-ops when the token belongs to a different client", async () => {
+    const { store, clients, provider, client } = setup();
+    const otherClient = clients.registerClient({ redirect_uris: ["https://other-cb"] }) as OAuthClientInformationFull;
+    const code = store.createAuthCode({ seal: "s", workspaceId: null, clientId: client.client_id, redirectUri: "https://cb", codeChallenge: "ch", scopes: [] });
+    const t = await provider.exchangeAuthorizationCode(client, code, undefined, "https://cb");
+
+    await provider.revokeToken(otherClient, { token: t.access_token });
+
+    const info = await provider.verifyAccessToken(t.access_token);
+    expect(info.clientId).toBe(client.client_id); // still valid — not revoked
   });
 });

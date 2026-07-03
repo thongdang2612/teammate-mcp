@@ -9,6 +9,9 @@ import { buildLoginRouter } from "./login.js";
 
 export const OAUTH_SCOPES = ["teammate"];
 
+/** How often the expired-entry sweep runs (mirrors the HTTP idle-session sweep in index.ts). */
+const TOKEN_STORE_SWEEP_INTERVAL_MS = 60_000;
+
 export interface OAuthWiring {
   provider: DiaflowOAuthProvider;
   authRouter: RequestHandler;
@@ -25,6 +28,9 @@ export function buildOAuthWiring(cfg: AppConfig): OAuthWiring {
   const clients = new InMemoryClientStore();
   const provider = new DiaflowOAuthProvider({ store, clients, loginPath: "/login", scopes: OAUTH_SCOPES });
 
+  const sweep = setInterval(() => store.sweepExpired(), TOKEN_STORE_SWEEP_INTERVAL_MS);
+  sweep.unref(); // don't hold the process open just for the sweep
+
   const issuerUrl = new URL(cfg.oauthIssuerUrl);
   const resourceServerUrl = new URL(cfg.oauthResourceUrl);
   const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(resourceServerUrl);
@@ -37,7 +43,7 @@ export function buildOAuthWiring(cfg: AppConfig): OAuthWiring {
     resourceName: "Diaflow Teammate MCP",
   });
 
-  const loginRouter = buildLoginRouter({ store, baseUrl: cfg.diaflowApiBase });
+  const loginRouter = buildLoginRouter({ store, baseUrl: cfg.diaflowApiBase, clients });
   const bearer = requireBearerAuth({ verifier: provider, resourceMetadataUrl });
 
   return { provider, authRouter, loginRouter, bearer, resourceMetadataUrl };

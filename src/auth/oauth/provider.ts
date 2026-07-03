@@ -82,8 +82,13 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
     };
   }
 
-  async revokeToken(_client: OAuthClientInformationFull, request: OAuthTokenRevocationRequest): Promise<void> {
-    this.opts.store.revoke(request.token);
+  async revokeToken(client: OAuthClientInformationFull, request: OAuthTokenRevocationRequest): Promise<void> {
+    // Per the SDK contract, revoking an invalid/unknown token or one owned by a different
+    // client is a silent no-op (no error) — only ever revoke tokens the caller actually owns.
+    const owner = this.opts.store.getAccess(request.token) ?? this.opts.store.getRefresh(request.token);
+    if (owner && owner.clientId === client.client_id) {
+      this.opts.store.revoke(request.token);
+    }
   }
 
   updateAccessSeal(token: string, seal: string): void {
