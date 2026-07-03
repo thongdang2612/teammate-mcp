@@ -27,8 +27,21 @@ cp .env.example .env
 | `MCP_HTTP_PORT` | no (default `8787`) | Port the HTTP transport listens on. Only used when `MCP_TRANSPORT=http`. |
 | `MCP_PUBLIC_URL` | only for custom-MCP registration | The public `https://.../mcp` URL this server is reachable at. Required to call `register_self_as_custom_mcp` — Diaflow rejects `http://`/localhost/private URLs. |
 | `MCP_INBOUND_TOKEN` | recommended for any non-local HTTP deploy | Bearer token that callers must present (`Authorization: Bearer <token>`) on every request to `/mcp`. This is also the value you register as the custom-MCP resource's `key`, so Diaflow authenticates itself back to this server. If unset, the HTTP transport accepts unauthenticated requests — fine for local dev, unsafe for a public deploy. |
-| `DIAFLOW_TOKEN` | optional | A non-interactive Diaflow "sealed session" token. When set, the server skips the interactive `connect_diaflow`/`submit_code` flow entirely and authenticates every request with this fixed token (see `StaticTokenProvider`). Use this for service/teammate-runtime deployments where there is no human to click through a magic-code login. |
+| `DIAFLOW_TOKEN` | optional | A non-interactive Diaflow "sealed session" token. When set, the server skips the interactive `connect_diaflow`/`submit_code` flow entirely and authenticates every request with this fixed token (see `StaticTokenProvider`). Use this for service/teammate-runtime deployments where there is no human to click through a magic-code login. Ignored when `MCP_AUTH_MODE=oauth`. |
 | `DIAFLOW_WORKSPACE_ID` | optional, pairs with `DIAFLOW_TOKEN` | Fixes the active workspace when using a static token (a static token has no `set_workspace`/`list_workspaces` capability). |
+| `MCP_AUTH_MODE` | no (default `static`) | `static` (single service seal + `MCP_INBOUND_TOKEN` gate, described above) or `oauth` (per-user login via Diaflow magic code — see [OAuth mode (per-user auth)](#oauth-mode-per-user-auth) below). `oauth` mode requires `MCP_PUBLIC_URL` and ignores `DIAFLOW_TOKEN`/`MCP_INBOUND_TOKEN`. |
+
+## OAuth mode (per-user auth)
+
+Setting `MCP_AUTH_MODE=oauth` switches `/mcp` from the single shared-secret model above to a real per-user OAuth flow, backed by a self-hosted authorization server built on the MCP SDK's `mcpAuthRouter`/`requireBearerAuth`:
+
+- **Dynamic Client Registration (DCR) + PKCE.** Any MCP client (including Diaflow's own "Connect" flow) can `POST /register` to obtain a `client_id` with no manual setup, then run a standard authorization-code-with-PKCE flow against `/authorize` and `/token`. This is what lets Diaflow's admin UI paste in `https://<host>/mcp` and have discovery succeed automatically, instead of timing out looking for OAuth metadata.
+- **Magic-code login at `/login`.** Instead of Diaflow account passwords, `/authorize` redirects the browser to a small hosted login UI (`GET/POST /login`) that walks the user through Diaflow's existing magic-code flow (enter work email → enter the emailed code) before minting the authorization code.
+- **Per-user tokens.** Each issued access token is bound to the sealed Diaflow session obtained from that user's own login — every MCP session authenticated with that token acts as that user, in their own workspace, not a shared service identity.
+- **In-memory token/client/login state (v1).** Tokens, registered clients, and in-flight logins all live in process memory (no database). This means all connected users must re-login after a server restart or redeploy — acceptable for the current single-instance deployment, but a limitation to be aware of before scaling to multiple instances or expecting long-lived sessions across deploys.
+- **Known limitation:** if an MCP session outlives the access token that created it, the seal-rotation writeback still targets that original token — inherent to the in-memory v1 design.
+
+To enable it, set `MCP_AUTH_MODE=oauth` and `MCP_PUBLIC_URL` (see `.env.production.example`); `DIAFLOW_TOKEN`/`MCP_INBOUND_TOKEN` are not used in this mode.
 
 ## Run
 

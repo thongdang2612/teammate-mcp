@@ -5,3 +5,6 @@ coverage
 diaflow-backend/
 diaflow-expo/
 .claude/
+
+# subagent-driven-development working files (local only)
+.sdd/

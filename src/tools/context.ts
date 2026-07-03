@@ -5,7 +5,7 @@ import { SkillsApi } from "../diaflow/skills.js";
 import { ConversationsApi } from "../diaflow/conversations.js";
 import { SubAgentsApi } from "../diaflow/sub-agents.js";
 import { MemorySessionStore } from "../auth/session-store.js";
-import { WorkOSSessionProvider, StaticTokenProvider, type TokenProvider } from "../auth/token-provider.js";
+import { WorkOSSessionProvider, StaticTokenProvider, SealTokenProvider, type TokenProvider } from "../auth/token-provider.js";
 
 export interface ToolContext {
   provider: TokenProvider;
@@ -19,10 +19,15 @@ export interface ToolContext {
   inboundToken?: string;
 }
 
-export function buildContext(cfg: AppConfig): ToolContext {
-  const provider: TokenProvider = cfg.staticToken
-    ? new StaticTokenProvider(cfg.staticToken, cfg.staticWorkspaceId ?? null)
-    : new WorkOSSessionProvider({ store: new MemorySessionStore(), key: "default", baseUrl: cfg.diaflowApiBase });
+export function buildContext(
+  cfg: AppConfig,
+  identity?: { seal: string; workspaceId: number | null; onRotate?: (seal: string) => void },
+): ToolContext {
+  const provider: TokenProvider = identity
+    ? new SealTokenProvider(identity.seal, identity.workspaceId, identity.onRotate)
+    : cfg.staticToken
+      ? new StaticTokenProvider(cfg.staticToken, cfg.staticWorkspaceId ?? null)
+      : new WorkOSSessionProvider({ store: new MemorySessionStore(), key: "default", baseUrl: cfg.diaflowApiBase });
 
   const client = new DiaflowClient({
     baseUrl: cfg.diaflowApiBase,

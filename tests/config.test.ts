@@ -46,3 +46,30 @@ describe("loadConfig", () => {
     expect(cfg.httpPort).toBe(9001);
   });
 });
+
+const base = {
+  DIAFLOW_API_BASE: "https://api.diaflow.io",
+  MCP_TRANSPORT: "http",
+};
+
+describe("MCP_AUTH_MODE", () => {
+  it("defaults to static", () => {
+    const cfg = loadConfig({ ...base, DIAFLOW_TOKEN: "seal" } as any);
+    expect(cfg.authMode).toBe("static");
+  });
+
+  it("oauth mode requires an https MCP_PUBLIC_URL and derives issuer + resource", () => {
+    const cfg = loadConfig({
+      ...base,
+      MCP_AUTH_MODE: "oauth",
+      MCP_PUBLIC_URL: "https://teammate-mcp.onrender.com/mcp",
+    } as any);
+    expect(cfg.authMode).toBe("oauth");
+    expect(cfg.oauthIssuerUrl).toBe("https://teammate-mcp.onrender.com");
+    expect(cfg.oauthResourceUrl).toBe("https://teammate-mcp.onrender.com/mcp");
+  });
+
+  it("oauth mode without MCP_PUBLIC_URL throws", () => {
+    expect(() => loadConfig({ ...base, MCP_AUTH_MODE: "oauth" } as any)).toThrow();
+  });
+});

@@ -66,6 +66,32 @@ export class WorkOSSessionProvider implements TokenProvider {
   }
 }
 
+export class SealTokenProvider implements TokenProvider {
+  private seal: string;
+
+  constructor(
+    seal: string,
+    private readonly workspaceId: number | null,
+    private readonly writeRotate?: (seal: string) => void,
+  ) {
+    this.seal = seal;
+  }
+
+  async getToken(): Promise<string | null> {
+    return this.seal;
+  }
+  getWorkspaceId(): number | null {
+    return this.workspaceId;
+  }
+  onRotate(seal: string): void {
+    this.seal = seal;
+    this.writeRotate?.(seal);
+  }
+  async isConnected(): Promise<boolean> {
+    return true;
+  }
+}
+
 export class StaticTokenProvider implements TokenProvider {
   private seal: string;
   private readonly workspaceId: number | null;
