@@ -58,7 +58,7 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       if (r.status === "working") {
         return asText({
           ...r,
-          note: `The teammate is still working (threadId "${r.threadId}"). Call get_teammate_reply with threadId "${r.threadId}" and keep calling until status is "completed" — it waits server-side, so just call it again whenever it returns "working".`,
+          note: `The teammate has NOT finished — you do NOT have the result yet. Call get_teammate_reply with threadId "${r.threadId}" NOW, and keep calling it repeatedly (each call waits ~20s) until it returns status "completed". A long task can need many polls over several minutes — do NOT stop after one or two, and do NOT tell the user it is "still working" or move on until you have the completed reply. Only if it is clearly taking many minutes should you report interim status and tell the user they can ask you to check again.`,
         });
       }
       return asText(r);
@@ -73,7 +73,8 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
         "Pass the threadId from that response. Blocks server-side until the run reaches a terminal " +
         "state or the wait budget elapses, then returns { status: \"completed\" | \"failed\" | " +
         "\"interrupted\" | \"working\", reply?, error? }. If \"working\", the run is still going — " +
-        "call again with the same threadId (unlimited).",
+        "call get_teammate_reply again with the same threadId, and keep polling (a long task may " +
+        "need many calls over several minutes) until it returns \"completed\". Do not give up early.",
       inputSchema: {
         threadId: z.string().min(1).describe("The threadId returned by message_teammate for this run."),
       },
