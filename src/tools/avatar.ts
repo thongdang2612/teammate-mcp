@@ -4,6 +4,7 @@ import type { DiaflowClient } from "../diaflow/client.js";
 import type { TeammatesApi } from "../diaflow/teammates.js";
 import { listPresetAvatars } from "../diaflow/avatars.js";
 import { uploadRemoteImage as defaultUpload } from "../diaflow/upload.js";
+import { TEAMMATE_ID_DESC } from "./descriptions.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -39,7 +40,7 @@ export function registerAvatarTools(server: McpServer, deps: AvatarToolDeps): vo
     "set_teammate_avatar",
     {
       description: "Set a teammate's avatar from a remote image URL (uploaded via S3 presign) or a Diaflow preset URL.",
-      inputSchema: { teammateId: z.string().min(1), imageUrl: z.string().url() },
+      inputSchema: { teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC), imageUrl: z.string().url() },
     },
     async (args) => {
       let icon: string;

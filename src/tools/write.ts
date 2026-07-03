@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolContext } from "./context.js";
+import { TEAMMATE_ID_DESC } from "./descriptions.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -33,7 +34,7 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
     {
       description: "Update a teammate's fields (name, model, description, instruction, tags, icon, ...).",
       inputSchema: {
-        teammateId: z.string().min(1),
+        teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC),
         name: z.string().optional(),
         title: z.string().optional(),
         modelProvider: z.string().optional(),
