@@ -73,3 +73,15 @@ describe("MCP_AUTH_MODE", () => {
     expect(() => loadConfig({ ...base, MCP_AUTH_MODE: "oauth" } as any)).toThrow();
   });
 });
+
+describe("loadConfig messageWaitMs", () => {
+  it("defaults the SSE budget to 90000ms", () => {
+    const cfg = loadConfig({ DIAFLOW_API_BASE: "https://api-dev.diaflow.io" } as NodeJS.ProcessEnv);
+    expect(cfg.messageWaitMs).toBe(90000);
+  });
+
+  it("honors an explicit MESSAGE_TEAMMATE_WAIT_MS", () => {
+    const cfg = loadConfig({ DIAFLOW_API_BASE: "https://api-dev.diaflow.io", MESSAGE_TEAMMATE_WAIT_MS: "45000" } as unknown as NodeJS.ProcessEnv);
+    expect(cfg.messageWaitMs).toBe(45000);
+  });
+});

@@ -97,12 +97,13 @@ export interface FileRef {
   artifact_url?: string;
 }
 
-export type RunStatus = "completed" | "working" | "unknown";
+export type RunStatus = "completed" | "working" | "failed" | "interrupted" | "unknown";
 
 export interface CompletionResult {
   status: RunStatus;
   threadId: string;
   reply?: string;
+  error?: string;
   usage?: { totalTokens?: number };
 }
 
@@ -110,4 +111,5 @@ export interface RunResult {
   status: RunStatus;
   threadId: string;
   reply?: string;
+  error?: string;
 }
