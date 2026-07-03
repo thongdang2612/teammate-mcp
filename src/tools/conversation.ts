@@ -51,6 +51,10 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
         files,
         webSearch: args.webSearch,
       });
+      // Completed: hand back the teammate's reply as plain text — the answer is here, so the
+      // orchestrator should treat this as a finished tool call, not a status object to act on.
+      if (r.status === "completed") return asText(r.reply ?? "");
+      if (r.status === "failed") return asText(`The teammate's run failed: ${r.error ?? "unknown error"}`);
       if (r.status === "working") {
         return asText({
           ...r,
@@ -74,7 +78,12 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
         threadId: z.string().min(1).describe("The threadId returned by message_teammate for this run."),
       },
     },
-    async (args) => asText(await deps.conversations.waitForReply(args.threadId)),
+    async (args) => {
+      const r = await deps.conversations.waitForReply(args.threadId);
+      if (r.status === "completed") return asText(r.reply ?? "");
+      if (r.status === "failed") return asText(`The teammate's run failed: ${r.error ?? "unknown error"}`);
+      return asText(r); // working / interrupted — keep the structured shape so the caller can retry
+    },
   );
 
   server.registerTool(

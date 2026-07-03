@@ -88,7 +88,7 @@ export class ConversationsApi {
         if (tid) threadId = tid;
         const outcome = terminalOutcome(frame);
         if (outcome) {
-          logTeammate("message", { status: outcome.status, threadId, ms: Date.now() - startedAt, ct, events });
+          logTeammate("message", { status: outcome.status, threadId, ms: Date.now() - startedAt, ct, events, replyLen: outcome.reply?.length ?? 0 });
           return { ...outcome, threadId };
         }
       }
@@ -128,7 +128,7 @@ export class ConversationsApi {
         events.push(frame.event);
         const outcome = terminalOutcome(frame);
         if (outcome) {
-          logTeammate("reply", { status: outcome.status, threadId, ms: Date.now() - startedAt, ct, events });
+          logTeammate("reply", { status: outcome.status, threadId, ms: Date.now() - startedAt, ct, events, replyLen: outcome.reply?.length ?? 0 });
           return { ...outcome, threadId };
         }
       }

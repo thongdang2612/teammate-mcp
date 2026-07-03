@@ -7,14 +7,13 @@ function fakeServer() {
 }
 
 describe("conversation tools", () => {
-  it("message_teammate sends text and returns the reply + threadId", async () => {
-    const conversations = { sendMessage: vi.fn(async () => ({ threadId: "T1", reply: "done" })) };
+  it("message_teammate returns the reply as plain text when completed", async () => {
+    const conversations = { sendMessage: vi.fn(async () => ({ status: "completed", threadId: "T1", reply: "done" })) };
     const { server, tools } = fakeServer();
     registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
     const res = await tools["message_teammate"]({ teammateId: "u1", message: "go" });
     expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ teammateId: "u1", message: "go", threadId: undefined, files: undefined }));
-    expect(res.content[0].text).toContain("T1");
-    expect(res.content[0].text).toContain("done");
+    expect(res.content[0].text).toBe("done");
   });
 
   it("message_teammate uploads attachmentUrls first", async () => {
@@ -39,13 +38,21 @@ describe("conversation tools", () => {
     expect(payload.note).toContain("T5");
   });
 
-  it("get_teammate_reply calls waitForReply with the threadId", async () => {
+  it("get_teammate_reply returns the reply as plain text when completed", async () => {
     const conversations = { waitForReply: vi.fn(async () => ({ status: "completed", threadId: "T5", reply: "done" })) };
     const { server, tools } = fakeServer();
     registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
     const out = await tools["get_teammate_reply"]({ threadId: "T5" });
     expect(conversations.waitForReply).toHaveBeenCalledWith("T5");
-    expect(JSON.parse(out.content[0].text)).toEqual({ status: "completed", threadId: "T5", reply: "done" });
+    expect(out.content[0].text).toBe("done");
+  });
+
+  it("get_teammate_reply keeps the structured shape while still working", async () => {
+    const conversations = { waitForReply: vi.fn(async () => ({ status: "working", threadId: "T5" })) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
+    const out = await tools["get_teammate_reply"]({ threadId: "T5" });
+    expect(JSON.parse(out.content[0].text)).toEqual({ status: "working", threadId: "T5" });
   });
 
   it("list_conversations forwards filters", async () => {
