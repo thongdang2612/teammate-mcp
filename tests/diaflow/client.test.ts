@@ -81,3 +81,37 @@ describe("DiaflowClient", () => {
     expect(headers.has("authorization")).toBe(false);
   });
 });
+
+const mk = (f: any, extra: Record<string, unknown> = {}) =>
+  new DiaflowClient({ baseUrl: "https://x", getToken: async () => "seal", getWorkspaceId: () => 7, fetchImpl: f, ...extra });
+
+describe("DiaflowClient.stream", () => {
+  it("returns the raw Response with auth + event-stream headers", async () => {
+    const res = new Response("event: ping\ndata: {}\n\n", { status: 200 });
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => res);
+    const out = await mk(f).stream("POST", "/agent-runtime/completions", { body: { stream: true } });
+    expect(out).toBe(res); // body left unread
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("https://x/api/v1/agent-runtime/completions");
+    const h = new Headers((init as RequestInit).headers);
+    expect(h.get("authorization")).toBe("Bearer seal");
+    expect(h.get("workspace-id")).toBe("7");
+    expect(h.get("accept")).toBe("text/event-stream");
+    expect((init as RequestInit).body).toBe(JSON.stringify({ stream: true }));
+  });
+
+  it("writes back a rotated session seal", async () => {
+    const onRotate = vi.fn();
+    const res = new Response("data: {}\n\n", { status: 200, headers: { "x-diaflow-session": "gAAAA-new" } });
+    await mk(async () => res, { onRotate }).stream("GET", "/agent-runtime/threads/T1/stream");
+    expect(onRotate).toHaveBeenCalledWith("gAAAA-new");
+  });
+
+  it("throws DiaflowHttpError on a non-2xx status", async () => {
+    const res = new Response(JSON.stringify({ message: "Thread not found" }), { status: 404 });
+    await expect(mk(async () => res).stream("GET", "/agent-runtime/threads/T1/stream")).rejects.toMatchObject({
+      status: 404,
+      message: "Thread not found",
+    });
+  });
+});
