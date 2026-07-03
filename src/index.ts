@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { loadConfig, type AppConfig } from "./config.js";
 import { buildContext, type ToolContext } from "./tools/context.js";
 import { buildServer } from "./server.js";
@@ -78,6 +78,35 @@ function rejectSessionIdentityMismatch(res: Response): void {
     error: { code: -32001, message: "Unauthorized: session does not belong to this token" },
     id: null,
   });
+}
+
+/**
+ * Logs one line per /mcp request (method, short session id, auth state, JSON-RPC method + tool
+ * name, final status) so tool-call activity is visible in the platform's log tab. Logs on
+ * `finish` to capture the response status. `console.error` (stderr) matches the rest of the file
+ * and is captured by Render/Docker.
+ */
+function mcpRequestLogger(req: Request, res: Response, next: NextFunction): void {
+  // Read fields lazily at `finish` so this can run FIRST (before auth + json) and still see
+  // req.body / req.auth once later middleware has populated them — while also capturing requests
+  // that are rejected before those run (e.g. 401 with no/invalid token).
+  res.on("finish", () => {
+    const sid = (req.headers["mcp-session-id"] as string | undefined)?.slice(0, 8) ?? "-";
+    const body = req.body as { method?: string; params?: { name?: string } } | undefined;
+    const rpc = req.method === "POST" && body && typeof body.method === "string" ? body.method : "";
+    const tool = rpc === "tools/call" ? (body?.params?.name ?? "?") : "";
+    const auth = req.auth ? "auth-ok" : req.headers["authorization"] ? "bearer" : "noauth";
+    console.error(`[mcp] ${req.method} sid=${sid} ${auth} rpc=${rpc}${tool ? ":" + tool : ""} -> ${res.statusCode}`);
+  });
+  next();
+}
+
+/** Error-handling middleware (registered last) so a thrown/rejected handler is logged, not silent. */
+function mcpErrorLogger(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  console.error("[mcp] handler error:", err instanceof Error ? err.stack ?? err.message : err);
+  if (!res.headersSent) {
+    res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null });
+  }
 }
 
 /**
@@ -189,7 +218,7 @@ export function buildHttpApp(cfg: AppConfig): Express {
     const wiring = buildOAuthWiring(cfg);
     app.use(wiring.authRouter); // /authorize /token /register /revoke + .well-known
     app.use(wiring.loginRouter); // /login
-    app.use("/mcp", wiring.bearer, express.json());
+    app.use("/mcp", mcpRequestLogger, wiring.bearer, express.json());
 
     mountMcp(app, cfg, (req) => {
       const seal = req.auth?.extra?.seal as string | undefined;
@@ -203,6 +232,7 @@ export function buildHttpApp(cfg: AppConfig): Express {
       };
     });
 
+    app.use(mcpErrorLogger);
     return app;
   }
 
@@ -215,6 +245,7 @@ export function buildHttpApp(cfg: AppConfig): Express {
 
   // Inbound auth: when MCP_INBOUND_TOKEN is set (required for a public deploy / Diaflow
   // custom-MCP), every /mcp request must present `Authorization: Bearer <MCP_INBOUND_TOKEN>`.
+  app.use("/mcp", mcpRequestLogger);
   app.use("/mcp", (req, res, next) => {
     if (!isInboundAuthorized(req.headers["authorization"], cfg.inboundToken)) {
       res.status(401).set("WWW-Authenticate", "Bearer").json({ error: "unauthorized" });
@@ -225,6 +256,7 @@ export function buildHttpApp(cfg: AppConfig): Express {
 
   mountMcp(app, cfg, () => undefined); // static: no per-request identity
 
+  app.use(mcpErrorLogger);
   return app;
 }
 
@@ -232,7 +264,11 @@ async function startHttpServer(cfg: AppConfig): Promise<void> {
   const app = buildHttpApp(cfg);
   await new Promise<void>((resolve) => {
     app.listen(cfg.httpPort, () => {
-      console.error(`diaflow-teammate-mcp listening on :${cfg.httpPort}/mcp`);
+      console.error(
+        `[boot] Diaflow Teammate MCP up | transport=http authMode=${cfg.authMode} ` +
+          `port=${cfg.httpPort} publicUrl=${cfg.oauthResourceUrl ?? cfg.publicUrl ?? "-"} ` +
+          `apiBase=${cfg.diaflowApiBase} inboundToken=${cfg.inboundToken ? "set" : "unset"}`,
+      );
       resolve();
     });
   });
