@@ -24,8 +24,8 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
     {
       description:
         "Post a message to a teammate. Returns { status }: \"completed\" with the reply for quick tasks, " +
-        "or \"working\" (with the teammateId) for long tasks — the target keeps running server-side. " +
-        "If status is \"working\", you MUST call get_teammate_reply with that teammateId, polling until it " +
+        "or \"working\" (with a threadId) for long tasks — the target keeps running server-side. " +
+        "If status is \"working\", you MUST call get_teammate_reply with that threadId, calling again until it " +
         "returns \"completed\", to get the result. Omit teammateId only to continue an existing thread. " +
         "Use for agent-to-agent orchestration.",
       inputSchema: {
