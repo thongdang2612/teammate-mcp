@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -50,12 +51,25 @@ function isInitializePost(body: unknown): boolean {
 }
 
 /**
+ * Constant-time equality for the session-identity comparison, mirroring
+ * `auth/inbound-auth.ts`'s `timingSafeEqualStrings` — avoids leaking the token via
+ * response-time timing differences.
+ */
+function tokensEqual(a: string | undefined, b: string | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+/**
  * True when `entry` was created under a different identity than the caller now presents.
  * `identityKey === undefined` means static mode (no per-request identity at all) — the check is
  * always skipped there, leaving static behavior unchanged.
  */
 function sessionIdentityMismatch(entry: SessionEntry, req: Request): boolean {
-  return entry.identityKey !== undefined && entry.identityKey !== req.auth?.token;
+  return entry.identityKey !== undefined && !tokensEqual(entry.identityKey, req.auth?.token);
 }
 
 function rejectSessionIdentityMismatch(res: Response): void {
