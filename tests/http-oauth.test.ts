@@ -125,15 +125,14 @@ async function obtainAccessToken(baseUrl: string, email: string): Promise<string
   return tokens.access_token as string;
 }
 
-describe("http app (oauth mode) — session hijack protection", () => {
+describe("http app (oauth mode) — stateless per-request isolation", () => {
   beforeEach(() => stubDiaflowMagicAuth());
   afterEach(() => vi.unstubAllGlobals());
 
-  it("rejects reuse of another user's Mcp-Session-Id, even with a valid token", async () => {
+  it("issues no Mcp-Session-Id and authenticates each request by its own token", async () => {
     const { url, close } = await start(cfg);
     try {
       const tokenA = await obtainAccessToken(url, "a@x.io");
-      const tokenB = await obtainAccessToken(url, "b@x.io");
 
       const initRes = await fetch(`${url}/mcp`, {
         method: "POST",
@@ -150,36 +149,35 @@ describe("http app (oauth mode) — session hijack protection", () => {
         }),
       });
       expect(initRes.status).toBe(200);
-      const sessionId = initRes.headers.get("mcp-session-id");
-      expect(sessionId).toBeTruthy();
+      // Stateless: no session id is issued. This is what interoperates with clients that don't
+      // thread a session across requests (e.g. Diaflow's agent runtime); the old stateful/session
+      // model caused handshake churn so tool calls never landed. With no shared session there is
+      // also no cross-session hijack surface — each request is isolated by its own token.
+      expect(initRes.headers.get("mcp-session-id")).toBeNull();
 
-      // User B presents A's session id with B's own (otherwise valid) token.
-      const hijackRes = await fetch(`${url}/mcp`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          authorization: `Bearer ${tokenB}`,
-          "mcp-session-id": sessionId!,
-        },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
-      });
-      expect(hijackRes.status).toBe(401);
-      const hijackBody = await hijackRes.json();
-      expect(hijackBody).toMatchObject({ jsonrpc: "2.0", error: { code: -32001 }, id: null });
-
-      // The owning user (A) reusing their own session id is unaffected.
-      const legitRes = await fetch(`${url}/mcp`, {
+      // A follow-up request with a valid token is handled on its own, with no prior session.
+      const okRes = await fetch(`${url}/mcp`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
           authorization: `Bearer ${tokenA}`,
-          "mcp-session-id": sessionId!,
         },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+      });
+      expect(okRes.status).toBe(200);
+
+      // A request with no token is rejected by requireBearerAuth (per-request auth).
+      const noAuthRes = await fetch(`${url}/mcp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list", params: {} }),
       });
-      expect(legitRes.status).not.toBe(401);
+      expect(noAuthRes.status).toBe(401);
+
+      // GET (server->client SSE stream) has no meaning without sessions -> 405.
+      const getRes = await fetch(`${url}/mcp`, { method: "GET", headers: { authorization: `Bearer ${tokenA}` } });
+      expect(getRes.status).toBe(405);
     } finally {
       close();
     }
