@@ -27,23 +27,25 @@ describe("conversation tools", () => {
     expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ files: [{ filename: "a.png", path: "k", artifact_url: "u" }] }));
   });
 
-  it("message_teammate on status:working returns a get_teammate_reply hand-off note", async () => {
-    const conversations = { sendMessage: vi.fn(async () => ({ status: "working", threadId: "" })) };
+  it("message_teammate hands off to get_teammate_reply with the threadId", async () => {
+    const conversations = { sendMessage: vi.fn(async () => ({ status: "working", threadId: "T5" })) };
     const { server, tools } = fakeServer();
     registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
-    const res = await tools["message_teammate"]({ teammateId: "u1", message: "long task" });
-    expect(res.content[0].text).toContain("working");
-    expect(res.content[0].text).toContain("get_teammate_reply");
-    expect(res.content[0].text).toContain("u1");
+    const out = await tools["message_teammate"]({ teammateId: "u1", message: "long task" });
+    const payload = JSON.parse(out.content[0].text);
+    expect(payload.status).toBe("working");
+    expect(payload.threadId).toBe("T5");
+    expect(payload.note).toContain("get_teammate_reply");
+    expect(payload.note).toContain("T5");
   });
 
-  it("get_teammate_reply forwards the teammateId to getLatestReply and returns the result", async () => {
-    const conversations = { getLatestReply: vi.fn(async () => ({ status: "completed", threadId: "S9", reply: "analysis done" })) };
+  it("get_teammate_reply calls waitForReply with the threadId", async () => {
+    const conversations = { waitForReply: vi.fn(async () => ({ status: "completed", threadId: "T5", reply: "done" })) };
     const { server, tools } = fakeServer();
     registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
-    const res = await tools["get_teammate_reply"]({ teammateId: "u1" });
-    expect(conversations.getLatestReply).toHaveBeenCalledWith("u1");
-    expect(res.content[0].text).toContain("analysis done");
+    const out = await tools["get_teammate_reply"]({ threadId: "T5" });
+    expect(conversations.waitForReply).toHaveBeenCalledWith("T5");
+    expect(JSON.parse(out.content[0].text)).toEqual({ status: "completed", threadId: "T5", reply: "done" });
   });
 
   it("list_conversations forwards filters", async () => {
