@@ -59,4 +59,18 @@ describe("readSse", () => {
     }
     expect(out).toEqual([{ event: "metadata", data: { thread_id: "T9" } }]);
   });
+
+  it("decodes a multibyte UTF-8 char split across a chunk boundary (flushes at end)", async () => {
+    const bytes = new TextEncoder().encode('event: final\ndata: {"content":"café"}');
+    const cut = bytes.length - 3; // split between the two bytes of 'é' (0xC3 | 0xA9)
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(bytes.slice(0, cut));
+        c.enqueue(bytes.slice(cut));
+        c.close();
+      },
+    });
+    const out = await collect(new Response(body, { status: 200 }));
+    expect(out).toEqual([{ event: "final", data: { content: "café" } }]);
+  });
 });

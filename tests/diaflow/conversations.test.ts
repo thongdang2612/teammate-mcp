@@ -47,6 +47,21 @@ describe("ConversationsApi.sendMessage", () => {
     expect(body.thread_id).toBe("T1");
     expect(body.agent_unique_id).toBeUndefined();
   });
+
+  it("returns working with the captured threadId when the send stream drops after metadata", async () => {
+    let pulls = 0;
+    const dropStream = new ReadableStream<Uint8Array>({
+      pull(c) {
+        // deliver metadata on the first pull, then reset the socket — the run has started, so this
+        // must resolve to working (threadId captured), not throw.
+        if (pulls++ === 0) c.enqueue(enc.encode('event: metadata\ndata: {"thread_id":"T7"}\n\n'));
+        else c.error(new Error("terminated"));
+      },
+    });
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => new Response(dropStream, { status: 200 }));
+    const r = await new ConversationsApi(client(f)).sendMessage({ teammateId: "u1", message: "go" });
+    expect(r).toEqual({ status: "working", threadId: "T7" });
+  });
 });
 
 describe("ConversationsApi.waitForReply", () => {
@@ -90,6 +105,18 @@ describe("ConversationsApi.waitForReply", () => {
       if (String(url).endsWith("/stream")) return json({ message: "Thread not found" }, 404);
       return json({ status: "running", messages: [] });
     });
+    const r = await new ConversationsApi(client(f)).waitForReply("T9");
+    expect(r).toEqual({ status: "working", threadId: "T9" });
+  });
+
+  it("returns working (not a thrown error) when the reconnect stream drops mid-run", async () => {
+    const dropStream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(enc.encode('event: thinking\ndata: {"content":"..."}\n\n'));
+        c.error(new Error("terminated")); // socket reset — not an AbortError, not a DiaflowHttpError
+      },
+    });
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => new Response(dropStream, { status: 200 }));
     const r = await new ConversationsApi(client(f)).waitForReply("T9");
     expect(r).toEqual({ status: "working", threadId: "T9" });
   });

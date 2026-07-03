@@ -5,10 +5,6 @@ import type { CompletionResult, RunResult, RunStatus, FileRef } from "./types.js
 
 const DEFAULT_WAIT_MS = 90000;
 
-function isAbortError(e: unknown): boolean {
-  return e instanceof Error && e.name === "AbortError";
-}
-
 /** Thread id carried by the `metadata` frame (emitted once, early). */
 function frameThreadId(frame: SseFrame): string | undefined {
   if (frame.event !== "metadata" || !frame.data || typeof frame.data !== "object") return undefined;
@@ -85,7 +81,11 @@ export class ConversationsApi {
       }
       return { status: "working", threadId };
     } catch (e) {
-      if (isAbortError(e)) return { status: "working", threadId };
+      // Genuine HTTP errors on the initial POST (401/500/…) must surface. A budget abort or a
+      // mid-stream network drop after the run started (threadId captured) leaves it running
+      // server-side → report working; if nothing started, surface the failure.
+      if (e instanceof DiaflowHttpError) throw e;
+      if (threadId) return { status: "working", threadId };
       throw e;
     } finally {
       clearTimeout(timer);
@@ -110,9 +110,14 @@ export class ConversationsApi {
       }
       return { status: "working", threadId };
     } catch (e) {
-      if (isAbortError(e)) return { status: "working", threadId };
-      if (e instanceof DiaflowHttpError && e.status === 404) return this.stateFallback(threadId);
-      throw e;
+      // 404 → the event buffer expired; fall back to /state. Other HTTP errors surface. A budget
+      // abort or a mid-stream network drop leaves the run going server-side → report working
+      // (the caller re-invokes and reconnects).
+      if (e instanceof DiaflowHttpError) {
+        if (e.status === 404) return this.stateFallback(threadId);
+        throw e;
+      }
+      return { status: "working", threadId };
     } finally {
       clearTimeout(timer);
     }

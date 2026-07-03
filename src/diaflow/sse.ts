@@ -30,6 +30,7 @@ export async function* readSse(res: Response, signal?: AbortSignal): AsyncGenera
         if (frame) yield frame;
       }
     }
+    buffer += decoder.decode(); // flush any trailing multibyte UTF-8 sequence held by the decoder
     const tail = parseFrame(buffer);
     if (tail) yield tail;
   } finally {
