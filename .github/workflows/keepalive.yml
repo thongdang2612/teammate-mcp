@@ -1,0 +1,45 @@
+name: Keep Render warm
+
+# Free-tier Render web services spin down after ~15 min of inactivity; the next
+# request then waits ~30-60s for a cold start, which exceeds Diaflow's tool-call
+# timeout ("connected but tool times out"). This cron pings the PUBLIC OAuth
+# discovery endpoint (no auth, returns 200) on a schedule to keep the instance awake.
+#
+# Notes:
+# - GitHub-hosted cron is best-effort: runs can be delayed 5-15+ min under load,
+#   and scheduled workflows auto-disable after 60 days with no repo activity.
+#   For guaranteed uptime use Render's paid tier (no spin-down) or an external
+#   monitor (UptimeRobot / cron-job.org) hitting the same URL.
+# - Change PING_URL if the deploy host changes.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
+  workflow_dispatch: {}       # allow manual runs from the Actions tab
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      PING_URL: https://teammate-mcp.onrender.com/.well-known/oauth-protected-resource/mcp
+    steps:
+      - name: Ping to keep the MCP server warm
+        run: |
+          set -euo pipefail
+          code=""
+          for attempt in 1 2 3; do
+            # --max-time 90 lets a single request ride out a cold start (Render
+            # holds the connection while the instance wakes, then returns 200).
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 90 "$PING_URL" || echo "000")
+            echo "attempt $attempt -> HTTP $code"
+            [ "$code" = "200" ] && break
+            sleep 15
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::keepalive ping failed (last status: $code)"
+            exit 1
+          fi
