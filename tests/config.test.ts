@@ -75,9 +75,9 @@ describe("MCP_AUTH_MODE", () => {
 });
 
 describe("loadConfig messageWaitMs", () => {
-  it("defaults the SSE budget to 90000ms", () => {
+  it("defaults the SSE budget to 20000ms (under Diaflow's 30s proxy cap)", () => {
     const cfg = loadConfig({ DIAFLOW_API_BASE: "https://api-dev.diaflow.io" } as NodeJS.ProcessEnv);
-    expect(cfg.messageWaitMs).toBe(90000);
+    expect(cfg.messageWaitMs).toBe(20000);
   });
 
   it("honors an explicit MESSAGE_TEAMMATE_WAIT_MS", () => {

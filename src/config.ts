@@ -7,7 +7,11 @@ const schema = z.object({
   DIAFLOW_API_BASE: z.url(),
   MCP_TRANSPORT: z.preprocess(emptyToUndefined, z.enum(["stdio", "http"]).default("stdio")),
   MCP_HTTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(8787)),
-  MESSAGE_TEAMMATE_WAIT_MS: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(90000)),
+  // Must stay under Diaflow's MCP proxy cap: it kills any tool call taking >30s and fabricates a
+  // fake "too slow, do not retry" success, discarding our real result (diaflow-backend
+  // modules/mcp/proxy.py _FORWARD_MAX_SECONDS = 30.0). 20s leaves margin for network/Render latency
+  // so our real completed/working result always reaches the caller.
+  MESSAGE_TEAMMATE_WAIT_MS: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(20000)),
   // Many container hosts (Cloud Run, Render, Fly, Heroku, …) inject the listen port as `PORT`.
   // When present it takes precedence over MCP_HTTP_PORT.
   PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),

@@ -3,7 +3,9 @@ import { DiaflowHttpError } from "./errors.js";
 import { readSse, type SseFrame } from "./sse.js";
 import type { CompletionResult, RunResult, RunStatus, FileRef } from "./types.js";
 
-const DEFAULT_WAIT_MS = 90000;
+// Kept under Diaflow's 30s MCP proxy cap (see config.ts MESSAGE_TEAMMATE_WAIT_MS). Beyond ~30s the
+// proxy fabricates a fake "too slow, do not retry" success and discards our real result.
+const DEFAULT_WAIT_MS = 20000;
 
 /** Operational diagnostics for the async teammate flow — surfaces in server logs as `[teammate] …`. */
 function logTeammate(op: string, info: Record<string, unknown>): void {
