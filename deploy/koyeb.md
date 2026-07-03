@@ -17,7 +17,7 @@ The server listens on the port from `$PORT`/`MCP_HTTP_PORT`; we use **8000** her
 5. **Environment variables** (mark the two token vars as **Secret**):
    - `MCP_TRANSPORT=http`
    - `MCP_HTTP_PORT=8000`
-   - `DIAFLOW_API_BASE=https://api.diaflow.io`
+   - `DIAFLOW_API_BASE=https://api-dev.diaflow.io`
    - `DIAFLOW_WORKSPACE_ID=<your workspace id>`
    - `MCP_INBOUND_TOKEN=<random secret>`  ← Secret
    - `DIAFLOW_TOKEN=<sealed session>`  ← Secret
@@ -51,7 +51,7 @@ koyeb service create teammate-mcp \
   --checks 8000:tcp \
   --env MCP_TRANSPORT=http \
   --env MCP_HTTP_PORT=8000 \
-  --env DIAFLOW_API_BASE=https://api.diaflow.io \
+  --env DIAFLOW_API_BASE=https://api-dev.diaflow.io \
   --env DIAFLOW_WORKSPACE_ID=<your workspace id> \
   --env MCP_INBOUND_TOKEN=@mcp-inbound-token \
   --env DIAFLOW_TOKEN=@diaflow-token

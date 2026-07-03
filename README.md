@@ -22,7 +22,7 @@ cp .env.example .env
 
 | Variable | Required | Description |
 |---|---|---|
-| `DIAFLOW_API_BASE` | yes | Base URL of the Diaflow backend, e.g. `https://api.diaflow.io`. All API calls are made against `${DIAFLOW_API_BASE}/api/v1/...`. |
+| `DIAFLOW_API_BASE` | yes | Base URL of the Diaflow backend, e.g. `https://api-dev.diaflow.io`. All API calls are made against `${DIAFLOW_API_BASE}/api/v1/...`. Use the environment that serves both the agents API and the magic-auth login endpoints — that is the **dev** backend (`api-dev.diaflow.io`); production `api.diaflow.io` does **not** expose `/api/v1/auth/magic-auth/*`, so oauth-mode login (and any magic-code auth) 404s there. |
 | `MCP_TRANSPORT` | no (default `stdio`) | `stdio` for a local process-per-client server, or `http` to run a Streamable-HTTP server. |
 | `MCP_HTTP_PORT` | no (default `8787`) | Port the HTTP transport listens on. Only used when `MCP_TRANSPORT=http`. |
 | `MCP_PUBLIC_URL` | only for custom-MCP registration | The public `https://.../mcp` URL this server is reachable at. Required to call `register_self_as_custom_mcp` — Diaflow rejects `http://`/localhost/private URLs. |
@@ -141,7 +141,7 @@ There is no automated live-API E2E test (it would require a real Diaflow account
 To sanity-check the HTTP transport without a full MCP client, start it and send a raw `initialize` request:
 
 ```bash
-MCP_TRANSPORT=http MCP_HTTP_PORT=8791 DIAFLOW_API_BASE=https://api.diaflow.io npm run dev
+MCP_TRANSPORT=http MCP_HTTP_PORT=8791 DIAFLOW_API_BASE=https://api-dev.diaflow.io npm run dev
 # in another shell:
 curl -i -X POST http://localhost:8791/mcp \
   -H "Content-Type: application/json" \
