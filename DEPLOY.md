@@ -28,7 +28,7 @@ Required values:
 | `MCP_TRANSPORT` | `http` (image default) |
 | `MCP_PUBLIC_URL` | the public `https://…/mcp` URL clients/Diaflow will hit |
 | `MCP_INBOUND_TOKEN` | long random secret; callers must send `Authorization: Bearer <it>` |
-| `DIAFLOW_API_BASE` | e.g. `https://api.diaflow.io` |
+| `DIAFLOW_API_BASE` | the backend serving your env's agents API **and** magic-auth, e.g. `https://api-dev.diaflow.io` (prod `api.diaflow.io` does not expose the magic-auth login routes) |
 | `DIAFLOW_TOKEN` | the service account's sealed session (step 3) |
 | `DIAFLOW_WORKSPACE_ID` | the workspace the service acts in |
 
@@ -39,7 +39,7 @@ Required values:
 Log the service account in via magic-auth and copy the `session` field (a `gAAAA…` Fernet string). With `X-Client: native` and **no** `Origin` header:
 
 ```bash
-BASE=https://api.diaflow.io
+BASE=https://api-dev.diaflow.io   # magic-auth lives on the dev backend, not prod api.diaflow.io
 EMAIL=service-account@yourco.com
 curl -sS -X POST "$BASE/api/v1/auth/magic-auth/send" \
   -H "Content-Type: application/json" -H "X-Client: native" -d "{\"email\":\"$EMAIL\"}"
