@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DiaflowClient } from "../diaflow/client.js";
 import type { TokenProvider } from "../auth/token-provider.js";
 import { registerCustomMcp as defaultRegister, attachMcpToAgent as defaultAttach } from "../diaflow/custom-mcp.js";
+import { TEAMMATE_ID_DESC } from "./descriptions.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] });
 const errText = (msg: string) => ({ isError: true as const, content: [{ type: "text" as const, text: msg }] });
@@ -40,7 +41,7 @@ export function registerIntegrationTools(server: McpServer, deps: IntegrationDep
     "attach_self_to_teammate",
     {
       description: "Attach a registered custom-MCP resource to a teammate so it can call this server's tools.",
-      inputSchema: { teammateId: z.string().min(1), resourceId: z.number().int().positive(), actions: z.array(z.string()).optional() },
+      inputSchema: { teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC), resourceId: z.number().int().positive(), actions: z.array(z.string()).optional() },
     },
     async (args) => asText(await attach(deps.client, args.teammateId, args.resourceId, args.actions)),
   );

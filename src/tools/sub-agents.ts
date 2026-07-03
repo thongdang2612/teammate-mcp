@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SubAgentsApi } from "../diaflow/sub-agents.js";
+import { TEAMMATE_ID_DESC, SUB_AGENT_ID_DESC } from "./descriptions.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -9,13 +10,16 @@ const starterPrompt = z.object({ title: z.string(), prompt: z.string() });
 export function registerSubAgentTools(server: McpServer, ctx: { subAgents: SubAgentsApi }): void {
   server.registerTool(
     "list_sub_agents",
-    { description: "List the sub-agents attached to an orchestrator teammate.", inputSchema: { teammateId: z.string().min(1) } },
+    { description: "List the sub-agents attached to an orchestrator teammate.", inputSchema: { teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC) } },
     async (args) => asText(await ctx.subAgents.list(args.teammateId)),
   );
 
   server.registerTool(
     "add_sub_agent",
-    { description: "Attach an existing teammate as a sub-agent of an orchestrator teammate.", inputSchema: { teammateId: z.string().min(1), subAgentId: z.string().min(1) } },
+    {
+      description: "Attach an existing teammate as a sub-agent of an orchestrator teammate.",
+      inputSchema: { teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC), subAgentId: z.string().min(1).describe(SUB_AGENT_ID_DESC) },
+    },
     async (args) => asText(await ctx.subAgents.attach(args.teammateId, args.subAgentId)),
   );
 
@@ -24,7 +28,7 @@ export function registerSubAgentTools(server: McpServer, ctx: { subAgents: SubAg
     {
       description: "Create a new teammate and attach it as a sub-agent of an orchestrator in one step.",
       inputSchema: {
-        teammateId: z.string().min(1),
+        teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC),
         modelProvider: z.string().min(1),
         modelName: z.string().min(1),
         name: z.string().optional(),
@@ -46,7 +50,10 @@ export function registerSubAgentTools(server: McpServer, ctx: { subAgents: SubAg
 
   server.registerTool(
     "remove_sub_agent",
-    { description: "Detach a sub-agent from an orchestrator teammate.", inputSchema: { teammateId: z.string().min(1), subAgentId: z.string().min(1) } },
+    {
+      description: "Detach a sub-agent from an orchestrator teammate.",
+      inputSchema: { teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC), subAgentId: z.string().min(1).describe(SUB_AGENT_ID_DESC) },
+    },
     async (args) => {
       await ctx.subAgents.detach(args.teammateId, args.subAgentId);
       return asText({ detached: true, teammateId: args.teammateId, subAgentId: args.subAgentId });

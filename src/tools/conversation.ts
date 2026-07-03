@@ -4,6 +4,7 @@ import type { DiaflowClient } from "../diaflow/client.js";
 import type { ConversationsApi } from "../diaflow/conversations.js";
 import type { FileRef } from "../diaflow/types.js";
 import { uploadChatAttachment as defaultUpload } from "../diaflow/upload.js";
+import { TEAMMATE_ID_DESC } from "./descriptions.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] });
 
@@ -24,7 +25,7 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       description: "Post a message to a teammate and get its reply (synchronous). Omit teammateId to continue an existing thread. Use for agent-to-agent orchestration.",
       inputSchema: {
         message: z.string().min(1),
-        teammateId: z.string().optional(),
+        teammateId: z.string().optional().describe(TEAMMATE_ID_DESC + " Omit ONLY to continue an existing thread you already started."),
         threadId: z.string().optional(),
         attachmentUrls: z.array(z.string().url()).optional(),
         webSearch: z.boolean().optional(),
