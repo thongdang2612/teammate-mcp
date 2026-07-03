@@ -17,7 +17,7 @@ const client = (f: any) => new DiaflowClient({ baseUrl: "https://x", getToken: a
 
 describe("ConversationsApi.sendMessage", () => {
   it("posts stream:true with agent_unique_id and returns completed on a final frame", async () => {
-    const f = vi.fn(async () => sse(['event: metadata\ndata: {"thread_id":"T1","session_id":"T1"}', 'event: final\ndata: {"content":"hi there"}']));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: metadata\ndata: {"thread_id":"T1","session_id":"T1"}', 'event: final\ndata: {"content":"hi there"}']));
     const r = await new ConversationsApi(client(f)).sendMessage({ teammateId: "u1", message: "hello" });
     expect(r).toEqual({ status: "completed", threadId: "T1", reply: "hi there" });
     const [url, init] = f.mock.calls[0];
@@ -28,19 +28,19 @@ describe("ConversationsApi.sendMessage", () => {
   });
 
   it("returns failed with the error text on an error frame", async () => {
-    const f = vi.fn(async () => sse(['event: metadata\ndata: {"thread_id":"T2"}', 'event: error\ndata: {"error":"model exploded"}']));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: metadata\ndata: {"thread_id":"T2"}', 'event: error\ndata: {"error":"model exploded"}']));
     const r = await new ConversationsApi(client(f)).sendMessage({ teammateId: "u1", message: "go" });
     expect(r).toEqual({ status: "failed", threadId: "T2", error: "model exploded" });
   });
 
   it("returns working with the captured threadId when the budget elapses mid-run", async () => {
-    const f = vi.fn(async () => sse(['event: metadata\ndata: {"thread_id":"T3"}'], true)); // stream stays open
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: metadata\ndata: {"thread_id":"T3"}'], true)); // stream stays open
     const r = await new ConversationsApi(client(f), 20).sendMessage({ teammateId: "u1", message: "long" });
     expect(r).toEqual({ status: "working", threadId: "T3" });
   });
 
   it("replays thread_id and omits agent_unique_id on continuation", async () => {
-    const f = vi.fn(async () => sse(['event: final\ndata: {"content":"more"}']));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: final\ndata: {"content":"more"}']));
     const r = await new ConversationsApi(client(f)).sendMessage({ message: "again", threadId: "T1" });
     expect(r).toEqual({ status: "completed", threadId: "T1", reply: "more" });
     const body = JSON.parse((f.mock.calls[0][1] as RequestInit).body as string);
@@ -51,26 +51,26 @@ describe("ConversationsApi.sendMessage", () => {
 
 describe("ConversationsApi.waitForReply", () => {
   it("returns completed from a replayed final frame", async () => {
-    const f = vi.fn(async () => sse(['event: final\ndata: {"content":"analysis done"}']));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: final\ndata: {"content":"analysis done"}']));
     const r = await new ConversationsApi(client(f)).waitForReply("T9");
     expect(r).toEqual({ status: "completed", threadId: "T9", reply: "analysis done" });
     expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agent-runtime/threads/T9/stream");
   });
 
   it("returns failed from a replayed error frame", async () => {
-    const f = vi.fn(async () => sse(['event: error\ndata: {"error":"boom"}']));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: error\ndata: {"error":"boom"}']));
     const r = await new ConversationsApi(client(f)).waitForReply("T9");
     expect(r).toEqual({ status: "failed", threadId: "T9", error: "boom" });
   });
 
   it("returns interrupted on a cancelled frame", async () => {
-    const f = vi.fn(async () => sse(['event: cancelled\ndata: {}']));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: cancelled\ndata: {}']));
     const r = await new ConversationsApi(client(f)).waitForReply("T9");
     expect(r).toEqual({ status: "interrupted", threadId: "T9" });
   });
 
   it("returns working when the budget elapses with no terminal frame", async () => {
-    const f = vi.fn(async () => sse(['event: thinking\ndata: {"content":"..."}'], true));
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => sse(['event: thinking\ndata: {"content":"..."}'], true));
     const r = await new ConversationsApi(client(f), 20).waitForReply("T9");
     expect(r).toEqual({ status: "working", threadId: "T9" });
   });
