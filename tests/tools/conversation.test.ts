@@ -27,6 +27,25 @@ describe("conversation tools", () => {
     expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ files: [{ filename: "a.png", path: "k", artifact_url: "u" }] }));
   });
 
+  it("message_teammate on status:working returns a get_teammate_reply hand-off note", async () => {
+    const conversations = { sendMessage: vi.fn(async () => ({ status: "working", threadId: "" })) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
+    const res = await tools["message_teammate"]({ teammateId: "u1", message: "long task" });
+    expect(res.content[0].text).toContain("working");
+    expect(res.content[0].text).toContain("get_teammate_reply");
+    expect(res.content[0].text).toContain("u1");
+  });
+
+  it("get_teammate_reply forwards the teammateId to getLatestReply and returns the result", async () => {
+    const conversations = { getLatestReply: vi.fn(async () => ({ status: "completed", threadId: "S9", reply: "analysis done" })) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
+    const res = await tools["get_teammate_reply"]({ teammateId: "u1" });
+    expect(conversations.getLatestReply).toHaveBeenCalledWith("u1");
+    expect(res.content[0].text).toContain("analysis done");
+  });
+
   it("list_conversations forwards filters", async () => {
     const conversations = { listSessions: vi.fn(async () => ({ results: [{ sessionId: "s1" }] })) };
     const { server, tools } = fakeServer();

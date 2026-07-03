@@ -41,7 +41,7 @@ export function buildContext(
     client,
     teammates: new TeammatesApi(client),
     skills: new SkillsApi(client),
-    conversations: new ConversationsApi(client),
+    conversations: new ConversationsApi(client, cfg.messageWaitMs),
     subAgents: new SubAgentsApi(client),
     baseUrl: cfg.diaflowApiBase,
     publicUrl: cfg.publicUrl,

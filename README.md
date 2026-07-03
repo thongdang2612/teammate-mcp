@@ -112,7 +112,8 @@ All tools are registered by `src/tools/register.ts`. Names below match `server.r
 - `list_workspaces` — list workspaces available to the connected user (degrades to a text note if the backend doesn't support listing).
 
 **Conversation** — `src/tools/conversation.ts`
-- `message_teammate` — post a message to a teammate and get its synchronous reply; omit `teammateId` to continue an existing thread. Useful for agent-to-agent orchestration. Optional `attachmentUrls` are uploaded (S3 presign) before sending.
+- `message_teammate` — post a message to a teammate. Waits up to `MESSAGE_TEAMMATE_WAIT_MS` (default 25s): returns `{status:"completed", reply}` for quick tasks, or `{status:"working", teammateId}` for long ones (the target keeps running server-side) so the orchestrator isn't frozen holding an HTTP request open. Omit `teammateId` to continue an existing thread. Optional `attachmentUrls` are uploaded (S3 presign) before sending.
+- `get_teammate_reply` — after `message_teammate` returns `status:"working"`, poll with the same `teammateId` until it returns `{status:"completed", reply}` (fetches the teammate's most recent conversation result). `working` = still processing; `unknown` = no session yet.
 - `list_conversations` — list conversation sessions, optionally filtered by teammate.
 - `get_conversation` — get a conversation session's message history.
 - `stop_conversation` — cancel an in-progress conversation run.

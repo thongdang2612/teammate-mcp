@@ -7,6 +7,7 @@ const schema = z.object({
   DIAFLOW_API_BASE: z.url(),
   MCP_TRANSPORT: z.preprocess(emptyToUndefined, z.enum(["stdio", "http"]).default("stdio")),
   MCP_HTTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(8787)),
+  MESSAGE_TEAMMATE_WAIT_MS: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(25000)),
   // Many container hosts (Cloud Run, Render, Fly, Heroku, …) inject the listen port as `PORT`.
   // When present it takes precedence over MCP_HTTP_PORT.
   PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
@@ -28,6 +29,7 @@ export interface AppConfig {
   authMode: "oauth" | "static";
   oauthIssuerUrl?: string;
   oauthResourceUrl?: string;
+  messageWaitMs: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -55,5 +57,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     authMode,
     oauthIssuerUrl,
     oauthResourceUrl,
+    messageWaitMs: parsed.MESSAGE_TEAMMATE_WAIT_MS,
   };
 }

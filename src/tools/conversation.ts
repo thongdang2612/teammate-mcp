@@ -22,7 +22,12 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
   server.registerTool(
     "message_teammate",
     {
-      description: "Post a message to a teammate and get its reply (synchronous). Omit teammateId to continue an existing thread. Use for agent-to-agent orchestration.",
+      description:
+        "Post a message to a teammate. Returns { status }: \"completed\" with the reply for quick tasks, " +
+        "or \"working\" (with the teammateId) for long tasks — the target keeps running server-side. " +
+        "If status is \"working\", you MUST call get_teammate_reply with that teammateId, polling until it " +
+        "returns \"completed\", to get the result. Omit teammateId only to continue an existing thread. " +
+        "Use for agent-to-agent orchestration.",
       inputSchema: {
         message: z.string().min(1),
         teammateId: z.string().optional().describe(TEAMMATE_ID_DESC + " Omit ONLY to continue an existing thread you already started."),
@@ -46,8 +51,31 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
         files,
         webSearch: args.webSearch,
       });
+      if (r.status === "working") {
+        return asText({
+          ...r,
+          teammateId: args.teammateId,
+          note: args.teammateId
+            ? `The teammate is still working. Call get_teammate_reply with teammateId "${args.teammateId}" (poll until status is "completed") to retrieve the result.`
+            : `The teammate is still working. Call get_teammate_reply with the target teammate's id (poll until status is "completed") to retrieve the result.`,
+        });
+      }
       return asText(r);
     },
+  );
+
+  server.registerTool(
+    "get_teammate_reply",
+    {
+      description:
+        "Fetch the latest reply from a teammate after message_teammate returned status \"working\". " +
+        "Pass the same teammateId. Returns { status: \"completed\" | \"working\" | \"unknown\", reply? }. " +
+        "If \"working\", the target is still processing — call again shortly to poll until \"completed\".",
+      inputSchema: {
+        teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC + " Use the same teammateId you passed to message_teammate."),
+      },
+    },
+    async (args) => asText(await deps.conversations.getLatestReply(args.teammateId)),
   );
 
   server.registerTool(

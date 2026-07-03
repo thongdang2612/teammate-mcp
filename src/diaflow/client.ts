@@ -12,6 +12,7 @@ export interface RequestOptions {
   query?: Record<string, string | number | undefined>;
   body?: unknown;
   workspaceId?: number | null;
+  signal?: AbortSignal;
 }
 
 export class DiaflowClient {
@@ -39,7 +40,7 @@ export class DiaflowClient {
       body = JSON.stringify(options.body);
     }
 
-    const res = await this.fetchImpl(url.toString(), { method, headers, body });
+    const res = await this.fetchImpl(url.toString(), { method, headers, body, signal: options.signal });
 
     const rotated = res.headers.get("x-diaflow-session");
     if (rotated) this.opts.onRotate?.(rotated);
