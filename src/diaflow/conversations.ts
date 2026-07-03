@@ -1,43 +1,47 @@
 import type { DiaflowClient } from "./client.js";
-import type { CompletionResult, RunResult, FileRef } from "./types.js";
+import { DiaflowHttpError } from "./errors.js";
+import { readSse, type SseFrame } from "./sse.js";
+import type { CompletionResult, RunResult, RunStatus, FileRef } from "./types.js";
 
-interface CompletionResponse {
-  thread_id?: string;
-  session_id?: string;
-  choices?: { message?: { role?: string; content?: string } }[];
-  usage?: { total_tokens?: number };
-}
-
-/** Loosely-typed message; the exact envelope path is normalized in `pickList`. */
-interface RtMessage {
-  role?: string;
-  content?: string;
-}
-interface RtSession {
-  session_id?: string;
-  thread_id?: string;
-  id?: string | number;
-}
-
-const DEFAULT_WAIT_MS = 25000;
+const DEFAULT_WAIT_MS = 90000;
 
 function isAbortError(e: unknown): boolean {
   return e instanceof Error && e.name === "AbortError";
 }
 
-/**
- * Normalize Diaflow list payloads: the backend uses a `{ data, message, status }` envelope with
- * paginated `results`, but some endpoints return the array at the top level. Accept both shapes.
- * NOTE: the exact shapes of `/agent-runtime/sessions` and `.../history` are UNVERIFIED against live
- * Diaflow (dev seal expired during build) — confirm and tighten with one live probe.
- */
-function pickList<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  if (payload && typeof payload === "object") {
-    const o = payload as { data?: { results?: T[] }; results?: T[] };
-    return o.data?.results ?? o.results ?? [];
+/** Thread id carried by the `metadata` frame (emitted once, early). */
+function frameThreadId(frame: SseFrame): string | undefined {
+  if (frame.event !== "metadata" || !frame.data || typeof frame.data !== "object") return undefined;
+  const d = frame.data as { thread_id?: string; session_id?: string };
+  return d.thread_id ?? d.session_id;
+}
+
+/** Map a terminal SSE frame to a run outcome, or null for non-terminal frames. */
+function terminalOutcome(frame: SseFrame): { status: RunStatus; reply?: string; error?: string } | null {
+  const d = (frame.data ?? {}) as { content?: string; error?: unknown };
+  switch (frame.event) {
+    case "final":
+      return { status: "completed", reply: d.content ?? "" };
+    case "error":
+      return { status: "failed", error: typeof d.error === "string" ? d.error : JSON.stringify(d.error ?? "unknown error") };
+    case "cancelled":
+      return { status: "interrupted" };
+    default:
+      return null;
   }
-  return [];
+}
+
+/** Newest assistant/`ai` message content from a `/threads/{id}/state` message list. */
+function finalMessageContent(messages: unknown): string {
+  if (!Array.isArray(messages)) return "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && typeof m === "object") {
+      const mm = m as { type?: string; role?: string; content?: string };
+      if ((mm.type === "ai" || mm.role === "assistant") && (mm.content ?? "").length > 0) return mm.content ?? "";
+    }
+  }
+  return "";
 }
 
 export class ConversationsApi {
@@ -47,12 +51,10 @@ export class ConversationsApi {
   ) {}
 
   /**
-   * Send a message to a teammate. Blocks up to `waitMs` for the reply:
-   *  - reply within the bound  → `{ status: "completed", threadId, reply, usage? }`
-   *  - exceeds the bound        → `{ status: "working", threadId }` (the target's run continues
-   *    server-side; retrieve the result later via `getLatestReply`).
-   * A caller-supplied `thread_id` is only sent when continuing an existing thread — the backend
-   * rejects unknown thread ids as "Session expired", so new runs let the backend assign the id.
+   * Send a message to a teammate over the buffered SSE transport. Reads frames up to `waitMs`:
+   * `final` → completed, `error` → failed, `cancelled` → interrupted; if the budget elapses the
+   * run keeps going server-side (detached forwarder) and we return `working` with the captured
+   * `threadId`. A caller-supplied `threadId` is only sent to continue an existing thread.
    */
   async sendMessage(params: {
     teammateId?: string;
@@ -63,7 +65,7 @@ export class ConversationsApi {
   }): Promise<CompletionResult> {
     const body: Record<string, unknown> = {
       messages: [{ role: "user", content: params.message }],
-      stream: false,
+      stream: true,
     };
     if (params.teammateId) body.agent_unique_id = params.teammateId;
     if (params.threadId) body.thread_id = params.threadId;
@@ -72,19 +74,18 @@ export class ConversationsApi {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.waitMs);
+    let threadId = params.threadId ?? "";
     try {
-      const res = await this.client.request<CompletionResponse>("POST", "/agent-runtime/completions", {
-        body,
-        signal: controller.signal,
-      });
-      return {
-        status: "completed",
-        threadId: res.thread_id ?? res.session_id ?? params.threadId ?? "",
-        reply: res.choices?.[0]?.message?.content ?? "",
-        usage: res.usage ? { totalTokens: res.usage.total_tokens } : undefined,
-      };
+      const res = await this.client.stream("POST", "/agent-runtime/completions", { body, signal: controller.signal });
+      for await (const frame of readSse(res, controller.signal)) {
+        const tid = frameThreadId(frame);
+        if (tid) threadId = tid;
+        const outcome = terminalOutcome(frame);
+        if (outcome) return { ...outcome, threadId };
+      }
+      return { status: "working", threadId };
     } catch (e) {
-      if (isAbortError(e)) return { status: "working", threadId: params.threadId ?? "" };
+      if (isAbortError(e)) return { status: "working", threadId };
       throw e;
     } finally {
       clearTimeout(timer);
@@ -92,29 +93,40 @@ export class ConversationsApi {
   }
 
   /**
-   * Retrieve the latest reply from a teammate's most recent conversation — used to poll the result
-   * of a `sendMessage` that returned `status:"working"`. Returns `completed` with the reply once an
-   * assistant message is present, `working` while none is, or `unknown` when the teammate has no
-   * session yet.
+   * Reconnect to a run and wait for its terminal state, up to `waitMs`. Replays the buffered
+   * `:events` (catching `final`/`error` that fired while disconnected) then follows live. If the
+   * event buffer has expired (`404`), falls back to `/threads/{id}/state`.
    */
-  async getLatestReply(teammateId: string): Promise<RunResult> {
-    const sessionsPayload = await this.client.request<unknown>("GET", "/agent-runtime/sessions", {
-      query: { agent_id: teammateId, page: 1, pageSize: 1 },
-    });
-    const sessions = pickList<RtSession>(sessionsPayload);
-    const newest = sessions[0];
-    const sid = newest?.session_id ?? newest?.thread_id ?? (newest?.id != null ? String(newest.id) : undefined);
-    if (!sid) return { status: "unknown", threadId: "" };
+  async waitForReply(threadId: string): Promise<RunResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.waitMs);
+    try {
+      const res = await this.client.stream("GET", `/agent-runtime/threads/${encodeURIComponent(threadId)}/stream`, {
+        signal: controller.signal,
+      });
+      for await (const frame of readSse(res, controller.signal)) {
+        const outcome = terminalOutcome(frame);
+        if (outcome) return { ...outcome, threadId };
+      }
+      return { status: "working", threadId };
+    } catch (e) {
+      if (isAbortError(e)) return { status: "working", threadId };
+      if (e instanceof DiaflowHttpError && e.status === 404) return this.stateFallback(threadId);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
-    const historyPayload = await this.client.request<unknown>(
+  /** Durable status after the SSE buffer TTL: `/threads/{id}/state` has no `error` status. */
+  private async stateFallback(threadId: string): Promise<RunResult> {
+    const state = await this.client.request<{ status?: string; messages?: unknown }>(
       "GET",
-      `/agent-runtime/sessions/${encodeURIComponent(sid)}/history`,
-      { query: { limit: 20 } },
+      `/agent-runtime/threads/${encodeURIComponent(threadId)}/state`,
     );
-    const messages = pickList<RtMessage>(historyPayload);
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant" && (m.content ?? "").length > 0);
-    if (lastAssistant) return { status: "completed", threadId: sid, reply: lastAssistant.content ?? "" };
-    return { status: "working", threadId: sid };
+    if (state.status === "completed") return { status: "completed", threadId, reply: finalMessageContent(state.messages) };
+    if (state.status === "interrupted") return { status: "interrupted", threadId };
+    return { status: "working", threadId };
   }
 
   listSessions(params: { agentId?: string; page?: number; pageSize?: number } = {}): Promise<unknown> {
