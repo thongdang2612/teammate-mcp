@@ -116,9 +116,9 @@ export class ConversationsApi {
    * `:events` (catching `final`/`error` that fired while disconnected) then follows live. If the
    * event buffer has expired (`404`), falls back to `/threads/{id}/state`.
    */
-  async waitForReply(threadId: string): Promise<RunResult> {
+  async waitForReply(threadId: string, budgetMs: number = this.waitMs): Promise<RunResult> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.waitMs);
+    const timer = setTimeout(() => controller.abort(), budgetMs);
     const events: string[] = [];
     const startedAt = Date.now();
     try {

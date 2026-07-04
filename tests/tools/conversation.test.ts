@@ -1,58 +1,74 @@
 import { describe, it, expect, vi } from "vitest";
 import { registerConversationTools } from "../../src/tools/conversation.js";
+import { JobStore } from "../../src/teammate/job-store.js";
 
 function fakeServer() {
   const tools: Record<string, any> = {};
   return { server: { registerTool: (n: string, _d: any, h: any) => { tools[n] = h; } }, tools };
 }
 
+// A never-settling promise — simulates a teammate still working past the grace window.
+const pending = () => new Promise<never>(() => {});
+
 describe("conversation tools", () => {
-  it("message_teammate returns the reply as plain text when completed", async () => {
-    const conversations = { sendMessage: vi.fn(async () => ({ status: "completed", threadId: "T1", reply: "done" })) };
+  it("message_teammate returns the reply inline when it finishes within the grace window", async () => {
+    const conversations = { sendMessage: vi.fn(async () => ({ status: "completed" as const, threadId: "T1", reply: "done" })) };
     const { server, tools } = fakeServer();
-    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
+    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: new JobStore(), graceMs: 1000 } as any);
     const res = await tools["message_teammate"]({ teammateId: "u1", message: "go" });
-    expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ teammateId: "u1", message: "go", threadId: undefined, files: undefined }));
+    expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ teammateId: "u1", message: "go" }));
     expect(res.content[0].text).toBe("done");
   });
 
-  it("message_teammate uploads attachmentUrls first", async () => {
-    const conversations = { sendMessage: vi.fn(async () => ({ threadId: "T1", reply: "ok" })) };
-    const uploadChatAttachment = vi.fn(async () => ({ filename: "a.png", path: "k", artifact_url: "u" }));
+  it("message_teammate returns { working, jobId } when the task exceeds the grace window", async () => {
+    const conversations = { sendMessage: vi.fn(async () => ({ status: "working" as const, threadId: "T1" })), waitForReply: vi.fn(() => pending()) };
     const { server, tools } = fakeServer();
-    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment } as any);
-    await tools["message_teammate"]({ teammateId: "u1", message: "look", attachmentUrls: ["https://r/a.png"] });
-    expect(uploadChatAttachment).toHaveBeenCalledTimes(1);
-    expect(conversations.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ files: [{ filename: "a.png", path: "k", artifact_url: "u" }] }));
-  });
-
-  it("message_teammate hands off to get_teammate_reply with the threadId", async () => {
-    const conversations = { sendMessage: vi.fn(async () => ({ status: "working", threadId: "T5" })) };
-    const { server, tools } = fakeServer();
-    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
-    const out = await tools["message_teammate"]({ teammateId: "u1", message: "long task" });
+    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: new JobStore(), graceMs: 10 } as any);
+    const out = await tools["message_teammate"]({ teammateId: "u1", message: "long" });
     const payload = JSON.parse(out.content[0].text);
     expect(payload.status).toBe("working");
-    expect(payload.threadId).toBe("T5");
+    expect(typeof payload.jobId).toBe("string");
     expect(payload.note).toContain("get_teammate_reply");
-    expect(payload.note).toContain("T5");
   });
 
-  it("get_teammate_reply returns the reply as plain text when completed", async () => {
-    const conversations = { waitForReply: vi.fn(async () => ({ status: "completed", threadId: "T5", reply: "done" })) };
+  it("relay_teammates starts a background job and returns { working, jobId }", async () => {
+    const conversations = { sendMessage: vi.fn(() => pending()), waitForReply: vi.fn(() => pending()) };
     const { server, tools } = fakeServer();
-    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
-    const out = await tools["get_teammate_reply"]({ threadId: "T5" });
-    expect(conversations.waitForReply).toHaveBeenCalledWith("T5");
-    expect(out.content[0].text).toBe("done");
+    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: new JobStore(), graceMs: 10 } as any);
+    const out = await tools["relay_teammates"]({ message: "collect", steps: [{ teammateId: "A" }, { teammateId: "B", instruction: "analyze" }] });
+    const payload = JSON.parse(out.content[0].text);
+    expect(payload.status).toBe("working");
+    expect(typeof payload.jobId).toBe("string");
+    expect(payload.note).toContain("get_teammate_reply");
   });
 
-  it("get_teammate_reply keeps the structured shape while still working", async () => {
-    const conversations = { waitForReply: vi.fn(async () => ({ status: "working", threadId: "T5" })) };
+  it("get_teammate_reply returns the plain reply for a completed job", async () => {
+    const store = new JobStore();
+    const job = store.create("message");
+    store.update(job.id, { status: "completed" as const, reply: "the answer" });
     const { server, tools } = fakeServer();
-    registerConversationTools(server as any, { conversations, client: {} as any, uploadChatAttachment: vi.fn() } as any);
-    const out = await tools["get_teammate_reply"]({ threadId: "T5" });
-    expect(JSON.parse(out.content[0].text)).toEqual({ status: "working", threadId: "T5" });
+    registerConversationTools(server as any, { conversations: {} as any, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: store } as any);
+    const out = await tools["get_teammate_reply"]({ jobId: job.id });
+    expect(out.content[0].text).toBe("the answer");
+  });
+
+  it("get_teammate_reply reports working with progress while the job runs", async () => {
+    const store = new JobStore();
+    const job = store.create("relay");
+    store.update(job.id, { progress: "step 1/2 (A)" });
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations: {} as any, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: store } as any);
+    const out = await tools["get_teammate_reply"]({ jobId: job.id });
+    const payload = JSON.parse(out.content[0].text);
+    expect(payload.status).toBe("working");
+    expect(payload.progress).toBe("step 1/2 (A)");
+  });
+
+  it("get_teammate_reply reports unknown for an unrecognized jobId", async () => {
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations: {} as any, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: new JobStore() } as any);
+    const out = await tools["get_teammate_reply"]({ jobId: "nope" });
+    expect(JSON.parse(out.content[0].text).status).toBe("unknown");
   });
 
   it("list_conversations forwards filters", async () => {

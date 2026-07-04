@@ -5,29 +5,43 @@ import type { ConversationsApi } from "../diaflow/conversations.js";
 import type { FileRef } from "../diaflow/types.js";
 import { uploadChatAttachment as defaultUpload } from "../diaflow/upload.js";
 import { TEAMMATE_ID_DESC } from "./descriptions.js";
+import { JobStore, jobStore as defaultJobStore } from "../teammate/job-store.js";
+import { startJob, raceGrace, runToCompletion, runRelay, type RelayStep } from "../teammate/runner.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] });
+
+/** How long message_teammate holds the tool response, hoping a quick task finishes in one call. */
+const GRACE_MS = 8000;
 
 export interface ConversationDeps {
   conversations: ConversationsApi;
   client: DiaflowClient;
   uploadChatAttachment?: typeof defaultUpload;
   now?: () => Date;
+  jobStore?: JobStore;
+  graceMs?: number;
 }
+
+const BUSY = {
+  status: "busy" as const,
+  note: "Too many teammate tasks are running right now. Wait a moment and try again.",
+};
 
 export function registerConversationTools(server: McpServer, deps: ConversationDeps): void {
   const upload = deps.uploadChatAttachment ?? defaultUpload;
   const now = deps.now ?? (() => new Date());
+  const store = deps.jobStore ?? defaultJobStore;
+  const graceMs = deps.graceMs ?? GRACE_MS;
 
   server.registerTool(
     "message_teammate",
     {
       description:
-        "Post a message to a teammate. Returns { status }: \"completed\" with the reply for quick tasks, " +
-        "or \"working\" (with a threadId) for long tasks — the target keeps running server-side. " +
-        "If status is \"working\", you MUST call get_teammate_reply with that threadId, calling again until it " +
-        "returns \"completed\", to get the result. Omit teammateId only to continue an existing thread. " +
-        "Use for agent-to-agent orchestration.",
+        "Send a message to a teammate and get their reply. The teammate runs in the background on " +
+        "the server (so long tasks are not cut off): a quick reply comes back inline as plain text; " +
+        "a longer one returns { status: \"working\", jobId } — then call get_teammate_reply with that " +
+        "jobId to fetch the result (it finishes server-side even if you check back later). Omit " +
+        "teammateId only to continue an existing thread. For a multi-step A→B→C hand-off, prefer relay_teammates.",
       inputSchema: {
         message: z.string().min(1),
         teammateId: z.string().optional().describe(TEAMMATE_ID_DESC + " Omit ONLY to continue an existing thread you already started."),
@@ -37,6 +51,7 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       },
     },
     async (args) => {
+      if (store.atCapacity()) return asText(BUSY);
       let files: FileRef[] | undefined;
       if (args.attachmentUrls?.length) {
         files = [];
@@ -44,24 +59,45 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
           files.push(await upload(deps.client, { url, threadId: args.threadId, date: now() }));
         }
       }
-      const r = await deps.conversations.sendMessage({
-        teammateId: args.teammateId,
-        message: args.message,
-        threadId: args.threadId,
-        files,
-        webSearch: args.webSearch,
+      const params = { teammateId: args.teammateId, message: args.message, threadId: args.threadId, files, webSearch: args.webSearch };
+      const { jobId, settled } = startJob(store, "message", (onProgress) => runToCompletion(deps.conversations, params, { onProgress }));
+      const graced = await raceGrace(settled, graceMs);
+      if (graced?.status === "completed") return asText(graced.reply ?? "");
+      if (graced?.status === "failed") return asText(`The teammate's run failed: ${graced.error ?? "unknown error"}`);
+      return asText({
+        status: "working",
+        jobId,
+        note: `The teammate is working in the background. Call get_teammate_reply with jobId "${jobId}" to fetch the result — it completes server-side even if you check later, so just call get_teammate_reply again (with this jobId) until status is "completed".`,
       });
-      // Completed: hand back the teammate's reply as plain text — the answer is here, so the
-      // orchestrator should treat this as a finished tool call, not a status object to act on.
-      if (r.status === "completed") return asText(r.reply ?? "");
-      if (r.status === "failed") return asText(`The teammate's run failed: ${r.error ?? "unknown error"}`);
-      if (r.status === "working") {
-        return asText({
-          ...r,
-          note: `The teammate has NOT finished — you do NOT have the result yet. Call get_teammate_reply with threadId "${r.threadId}" NOW, and keep calling it repeatedly (each call waits ~20s) until it returns status "completed". A long task can need many polls over several minutes — do NOT stop after one or two, and do NOT tell the user it is "still working" or move on until you have the completed reply. Only if it is clearly taking many minutes should you report interim status and tell the user they can ask you to check again.`,
-        });
-      }
-      return asText(r);
+    },
+  );
+
+  server.registerTool(
+    "relay_teammates",
+    {
+      description:
+        "Run a sequential relay across teammates: send the message to the first, feed its reply to " +
+        "the next, and so on (A→B→C…). The whole chain runs in the background on the server — no " +
+        "per-step waiting from you. Returns { status: \"working\", jobId }; call get_teammate_reply " +
+        "with that jobId to fetch the final result once the chain completes. Each step may include an " +
+        "optional instruction prepended to the previous step's output.",
+      inputSchema: {
+        message: z.string().min(1).describe("The initial message given to the first teammate in the chain."),
+        steps: z
+          .array(z.object({ teammateId: z.string().min(1), instruction: z.string().optional() }))
+          .min(1)
+          .describe("Ordered teammates. Each receives the previous step's reply (optionally prefixed by its instruction)."),
+      },
+    },
+    async (args) => {
+      if (store.atCapacity()) return asText(BUSY);
+      const steps: RelayStep[] = args.steps;
+      const { jobId } = startJob(store, "relay", (onProgress) => runRelay(deps.conversations, steps, args.message, { onProgress }));
+      return asText({
+        status: "working",
+        jobId,
+        note: `Relay started across ${steps.length} teammate(s), running in the background. Call get_teammate_reply with jobId "${jobId}" to fetch the final result — check back until status is "completed" (the chain finishes server-side regardless).`,
+      });
     },
   );
 
@@ -69,21 +105,27 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
     "get_teammate_reply",
     {
       description:
-        "Wait for and fetch a teammate's reply after message_teammate returned status \"working\". " +
-        "Pass the threadId from that response. Blocks server-side until the run reaches a terminal " +
-        "state or the wait budget elapses, then returns { status: \"completed\" | \"failed\" | " +
-        "\"interrupted\" | \"working\", reply?, error? }. If \"working\", the run is still going — " +
-        "call get_teammate_reply again with the same threadId, and keep polling (a long task may " +
-        "need many calls over several minutes) until it returns \"completed\". Do not give up early.",
+        "Fetch the result of a background teammate job started by message_teammate or relay_teammates. " +
+        "Pass the jobId from that response. Returns the reply as plain text when done, or " +
+        "{ status: \"working\", progress } while it runs (call again shortly — it finishes server-side), " +
+        "or an error if it failed.",
       inputSchema: {
-        threadId: z.string().min(1).describe("The threadId returned by message_teammate for this run."),
+        jobId: z.string().min(1).describe("The jobId returned by message_teammate or relay_teammates."),
       },
     },
     async (args) => {
-      const r = await deps.conversations.waitForReply(args.threadId);
-      if (r.status === "completed") return asText(r.reply ?? "");
-      if (r.status === "failed") return asText(`The teammate's run failed: ${r.error ?? "unknown error"}`);
-      return asText(r); // working / interrupted — keep the structured shape so the caller can retry
+      const job = store.get(args.jobId);
+      if (!job) {
+        return asText({ status: "unknown", note: "No job with that id — it may have expired or the server restarted. Start again with message_teammate or relay_teammates." });
+      }
+      if (job.status === "completed") return asText(job.reply ?? "");
+      if (job.status === "failed") return asText(`The teammate's run failed: ${job.error ?? "unknown error"}`);
+      return asText({
+        status: "working",
+        jobId: job.id,
+        progress: job.progress,
+        note: `Still running server-side. Call get_teammate_reply with jobId "${job.id}" again shortly — it will finish even if you wait.`,
+      });
     },
   );
 
