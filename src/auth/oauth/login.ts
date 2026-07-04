@@ -15,6 +15,13 @@ export interface LoginRouterOptions {
   fetchImpl?: typeof fetch;
 }
 
+/** Login-flow diagnostics — surfaces in server logs as `[auth] login.…`. Never logs codes/seals. */
+function logAuth(step: string, info: Record<string, unknown>): void {
+  // eslint-disable-next-line no-console
+  console.error(`[auth] ${step} ${JSON.stringify(info)}`);
+}
+const emailDomain = (e: string): string => e.split("@")[1] ?? "<none>";
+
 const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -73,10 +80,12 @@ export function buildLoginRouter(opts: LoginRouterOptions): Router {
     if (!code) {
       try {
         await sendMagicCode(opts.baseUrl, email, opts.fetchImpl);
-      } catch {
+      } catch (e) {
+        logAuth("login.send FAIL", { loginId: loginId.slice(0, 8), emailDomain: emailDomain(email), error: (e as Error).message });
         res.status(200).type("html").send(codeForm(loginId, email, "Could not send a code. Check the email and try again.", clientName));
         return;
       }
+      logAuth("login.send OK", { loginId: loginId.slice(0, 8), emailDomain: emailDomain(email) });
       res.type("html").send(codeForm(loginId, email, undefined, clientName));
       return;
     }
@@ -84,16 +93,19 @@ export function buildLoginRouter(opts: LoginRouterOptions): Router {
     let verified: { session: string; workspaceId: number | null };
     try {
       verified = await verifyMagicCode(opts.baseUrl, email, code, opts.fetchImpl);
-    } catch {
+    } catch (e) {
+      logAuth("login.verify FAIL", { loginId: loginId.slice(0, 8), emailDomain: emailDomain(email), error: (e as Error).message });
       res.status(200).type("html").send(codeForm(loginId, email, "Invalid or expired code. Try again.", clientName));
       return;
     }
 
     const login = opts.store.takeLogin(loginId);
     if (!login) {
+      logAuth("login.verify FAIL", { loginId: loginId.slice(0, 8), reason: "login_expired_or_missing" });
       res.status(400).type("html").send(page("<h1>Session expired</h1><p>Restart the authorization from your client.</p>"));
       return;
     }
+    logAuth("login.verify OK", { loginId: loginId.slice(0, 8), clientId: login.clientId, workspaceId: verified.workspaceId });
 
     const authCode = opts.store.createAuthCode({
       seal: verified.session,
@@ -107,6 +119,7 @@ export function buildLoginRouter(opts: LoginRouterOptions): Router {
     const redirect = new URL(login.redirectUri);
     redirect.searchParams.set("code", authCode);
     if (login.state) redirect.searchParams.set("state", login.state);
+    logAuth("login.redirect", { code: authCode.slice(0, 8), to: `${redirect.origin}${redirect.pathname}`, hasState: !!login.state });
     res.redirect(redirect.toString());
   });
 

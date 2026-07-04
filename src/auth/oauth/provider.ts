@@ -6,6 +6,13 @@ import type { OAuthTokenStore } from "./token-store.js";
 import type { InMemoryClientStore } from "./client-store.js";
 import { InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 
+/** OAuth-flow diagnostics — surfaces in server logs as `[auth] …`. Never logs full tokens/seals. */
+function logAuth(step: string, info: Record<string, unknown>): void {
+  // eslint-disable-next-line no-console
+  console.error(`[auth] ${step} ${JSON.stringify(info)}`);
+}
+const tag = (s: string | undefined): string => (s ? s.slice(0, 8) : "<none>");
+
 export interface DiaflowOAuthProviderOptions {
   store: OAuthTokenStore;
   clients: InMemoryClientStore;
@@ -29,6 +36,7 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
       scopes: params.scopes ?? this.opts.scopes,
       resource: params.resource?.toString(),
     });
+    logAuth("authorize", { clientId: client.client_id, redirectUri: params.redirectUri, hasChallenge: !!params.codeChallenge, loginId: tag(loginId) });
     res.redirect(`${this.opts.loginPath}?login_id=${encodeURIComponent(loginId)}`);
   }
 
@@ -45,13 +53,23 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
     redirectUri?: string,
   ): Promise<OAuthTokens> {
     const code = this.opts.store.takeAuthCode(authorizationCode);
-    if (!code) throw new InvalidGrantError("invalid or expired authorization code");
-    if (code.clientId !== client.client_id) throw new InvalidGrantError("authorization code was issued to a different client");
-    if (redirectUri !== undefined && redirectUri !== code.redirectUri) throw new InvalidGrantError("redirect_uri mismatch");
+    if (!code) {
+      logAuth("token.code FAIL", { reason: "code_not_found_or_expired", code: tag(authorizationCode), clientId: client.client_id });
+      throw new InvalidGrantError("invalid or expired authorization code");
+    }
+    if (code.clientId !== client.client_id) {
+      logAuth("token.code FAIL", { reason: "client_mismatch", codeClient: code.clientId, reqClient: client.client_id });
+      throw new InvalidGrantError("authorization code was issued to a different client");
+    }
+    if (redirectUri !== undefined && redirectUri !== code.redirectUri) {
+      logAuth("token.code FAIL", { reason: "redirect_uri_mismatch", got: redirectUri, want: code.redirectUri });
+      throw new InvalidGrantError("redirect_uri mismatch");
+    }
     const { accessToken, refreshToken, expiresIn } = this.opts.store.issueTokens(
       { seal: code.seal, workspaceId: code.workspaceId },
       { clientId: code.clientId, scopes: code.scopes },
     );
+    logAuth("token.code OK", { clientId: code.clientId, token: tag(accessToken), refresh: tag(refreshToken), expiresIn, workspaceId: code.workspaceId });
     return { access_token: accessToken, token_type: "Bearer", expires_in: expiresIn, refresh_token: refreshToken, scope: code.scopes.join(" ") };
   }
 
@@ -61,7 +79,10 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
     scopes?: string[],
   ): Promise<OAuthTokens> {
     const stored = this.opts.store.getRefresh(refreshToken);
-    if (!stored || stored.clientId !== client.client_id) throw new InvalidGrantError("invalid refresh token");
+    if (!stored || stored.clientId !== client.client_id) {
+      logAuth("token.refresh FAIL", { reason: stored ? "client_mismatch" : "refresh_not_found", refresh: tag(refreshToken), reqClient: client.client_id });
+      throw new InvalidGrantError("invalid refresh token");
+    }
     const grantScopes = scopes ?? stored.scopes;
     const issued = this.opts.store.issueTokens(
       { seal: stored.seal, workspaceId: stored.workspaceId },
@@ -72,7 +93,11 @@ export class DiaflowOAuthProvider implements OAuthServerProvider {
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const stored = this.opts.store.getAccess(token);
-    if (!stored) throw new InvalidTokenError("invalid or expired access token");
+    if (!stored) {
+      logAuth("verify FAIL", { token: tag(token), reason: "not_found_or_expired" });
+      throw new InvalidTokenError("invalid or expired access token");
+    }
+    logAuth("verify OK", { token: tag(token), clientId: stored.clientId, workspaceId: stored.workspaceId, expiresAt: stored.expiresAt });
     return {
       token,
       clientId: stored.clientId,
