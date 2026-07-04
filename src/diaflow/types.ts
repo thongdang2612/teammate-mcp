@@ -123,7 +123,7 @@ export interface PersonalSkill {
   description: string | null;
   files: Record<string, string>;
   isActive: boolean;
-  version: number;
+  version: string;
   createdAt: string;
   updatedAt: string;
 }

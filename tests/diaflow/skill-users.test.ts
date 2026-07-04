@@ -5,7 +5,7 @@ import { SkillUserApi } from "../../src/diaflow/skill-users.js";
 const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 const client = (f: any) => new DiaflowClient({ baseUrl: "https://x", getToken: async () => "t", getWorkspaceId: () => 1, fetchImpl: f });
 
-const RAW = { id: 7, unique_id: "sk1", workspace_id: 1, user_id: 2, name: "My Skill", description: "d", files: { "SKILL.md": "k/SKILL.md" }, is_active: true, version: 3, created_at: "2026-07-04T00:00:00Z", updated_at: "2026-07-04T00:00:00Z" };
+const RAW = { id: 7, uniqueId: "sk1", workspaceId: 1, userId: 2, name: "My Skill", description: "d", files: { "SKILL.md": "k/SKILL.md" }, isActive: true, version: "1.0.0", createdAt: "2026-07-04T00:00:00Z", updatedAt: "2026-07-04T00:00:00Z" };
 
 describe("SkillUserApi CRUD", () => {
   it("create posts name/description and maps the response to camelCase", async () => {
@@ -52,7 +52,7 @@ describe("SkillUserApi CRUD", () => {
 });
 
 describe("SkillUserApi file ops", () => {
-  const RAW = { id: 7, unique_id: "sk1", workspace_id: 1, user_id: 2, name: "My Skill", description: "d", files: { "SKILL.md": "wk/agent/skills/sk1/My Skill/SKILL.md" }, is_active: true, version: 3, created_at: "t", updated_at: "t" };
+  const RAW = { id: 7, uniqueId: "sk1", workspaceId: 1, userId: 2, name: "My Skill", description: "d", files: { "SKILL.md": "wk/agent/skills/sk1/My Skill/SKILL.md" }, isActive: true, version: "1.0.0", createdAt: "t", updatedAt: "t" };
 
   it("writeFile EDIT branch: presigned-edit -> PUT octet-stream -> confirm-edit", async () => {
     const calls: any[] = [];
