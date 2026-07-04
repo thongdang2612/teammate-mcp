@@ -40,7 +40,12 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
   server.registerTool(
     "update_teammate",
     {
-      description: "Update a teammate's fields (name, model, description, instruction, tags, icon, ...).",
+      description:
+        "Update a teammate's fields (name, model, description, instruction, tags, icon, ...). This is " +
+        "the ONLY way to actually change a teammate — you MUST call it and confirm success before " +
+        "telling the user the change is done; never just claim a rename/update happened without calling it. " +
+        "To change YOUR OWN name or info, first call list_teammates, find the teammate whose name matches " +
+        "the one you currently go by, use its teammateId here, then apply the change.",
       inputSchema: {
         teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC),
         name: z.string().optional(),
