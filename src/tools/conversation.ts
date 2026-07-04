@@ -41,11 +41,15 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
     "message_teammate",
     {
       description:
-        "Send a message to a teammate and get their reply. The teammate runs in the background on " +
+        "Send a message to ONE teammate and get their reply. The teammate runs in the background on " +
         "the server (so long tasks are not cut off): a quick reply comes back inline as plain text; " +
         "a longer one returns { status: \"working\", jobId } — then call get_teammate_reply with that " +
         "jobId to fetch the result (it finishes server-side even if you check back later). Omit " +
-        "teammateId only to continue an existing thread. For a multi-step A→B→C hand-off, prefer relay_teammates.",
+        "teammateId only to continue an existing thread. " +
+        "IMPORTANT: if the task is to take one teammate's reply and pass it to ANOTHER teammate " +
+        "(any \"ask X, then send it to Y\" or A→B→C hand-off), do NOT chain message_teammate calls " +
+        "yourself — call relay_teammates instead. It runs the whole chain server-side in one step and " +
+        "is far more reliable for multi-teammate work.",
       inputSchema: {
         message: z.string().min(1),
         teammateId: z.string().optional().describe(TEAMMATE_ID_DESC + " Omit ONLY to continue an existing thread you already started."),
@@ -80,11 +84,13 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
     "relay_teammates",
     {
       description:
-        "Run a sequential relay across teammates: send the message to the first, feed its reply to " +
-        "the next, and so on (A→B→C…). The whole chain runs in the background on the server — no " +
-        "per-step waiting from you. Returns { status: \"working\", jobId }; call get_teammate_reply " +
-        "with that jobId to fetch the final result once the chain completes. Each step may include an " +
-        "optional instruction prepended to the previous step's output.",
+        "USE THIS for ANY task involving more than one teammate in sequence — e.g. \"ask A, then send " +
+        "A's answer to B\", or A→B→C. It is the correct tool for every multi-teammate hand-off; do not " +
+        "emulate it with multiple message_teammate calls. Runs a sequential relay: the message goes to " +
+        "the first teammate, its reply feeds the next, and so on — the ENTIRE chain runs in the " +
+        "background on the server, no per-step waiting from you. Returns { status: \"working\", jobId }; " +
+        "call get_teammate_reply with that jobId to fetch the final result once the chain completes. " +
+        "Each step may include an optional instruction prepended to the previous step's output.",
       inputSchema: {
         message: z.string().min(1).describe("The initial message given to the first teammate in the chain."),
         steps: z
