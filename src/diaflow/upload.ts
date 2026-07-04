@@ -56,7 +56,12 @@ export async function uploadRemoteImage(
   const buf = new Uint8Array(await dl.arrayBuffer());
   if (buf.byteLength > maxBytes) throw new Error(`image size ${buf.byteLength} exceeds max ${maxBytes} bytes`);
 
-  const filename = `${params.teammateId}_${slugify(`avatar.${extensionFor(contentType)}`)}`;
+  // Epoch (ms) makes the S3 key unique per update. The backend builds the key
+  // verbatim from folder+name (no uniquifying), and buildModulePath is day-level,
+  // so a fixed name like "{id}_avatar.png" would reuse the SAME key/CDN URL all
+  // day — CloudFront then serves the stale cached image even though S3 was
+  // overwritten. A fresh epoch → new key → new URL → the new avatar shows.
+  const filename = `${params.teammateId}_avatar_${params.date.getTime()}.${extensionFor(contentType)}`;
   const folder = buildModulePath(TEAMMATE_ICON_FOLDER, params.date);
   const presigned = await presignUpload(client, { name: filename, type: contentType, folder, fileSize: buf.byteLength });
   await putToPresigned(presigned.uploadUrl, buf, contentType, fetchImpl);

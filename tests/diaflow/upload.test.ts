@@ -38,8 +38,15 @@ describe("upload", () => {
       if (url === "https://s3/put") return new Response(null, { status: 200 });
       throw new Error("unexpected " + url);
     });
-    const r = await uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://93.184.216.34/a.png", date: new Date(Date.UTC(2026, 6, 2)), fetchImpl: f as any });
+    const date = new Date(Date.UTC(2026, 6, 2));
+    const r = await uploadRemoteImage(client(f), { teammateId: "u1", imageUrl: "https://93.184.216.34/a.png", date, fetchImpl: f as any });
     expect(r.key).toBe("agent-teammate-icons/02-07-26/u1_a.png");
+    // The presign name carries an epoch so each update produces a unique S3 key/URL
+    // (avoids the stale-CDN-cache bug when re-setting an avatar the same day).
+    const presignCall = (f.mock.calls as any[]).find((c) => String(c[0]).endsWith("/drives/s3/presigned"))!;
+    const sentName = JSON.parse(presignCall[1].body as string).name;
+    expect(sentName).toBe(`u1_avatar_${date.getTime()}.png`);
+    expect(sentName).toMatch(/^u1_avatar_\d+\.png$/);
   });
 
   it("uploadRemoteImage rejects images over the size cap", async () => {
