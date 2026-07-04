@@ -101,6 +101,16 @@ All tools are registered by `src/tools/register.ts`. Names below match `server.r
 - `attach_skill` — attach a skill; provide exactly one of `skillWorkspaceId` / `skillSystemId` / `skillUserId`.
 - `detach_skill` — detach a skill; same one-of-three-ids contract.
 
+**Skill authoring** — `src/tools/skill-authoring.ts`
+- `create_personal_skill` — create a personal skill you own (name/description, optional SKILL.md content).
+- `list_personal_skills` — list personal skills you own.
+- `get_personal_skill` — get one personal skill (incl. its files map).
+- `update_personal_skill` — update a personal skill's name/description.
+- `delete_personal_skill` — delete a personal skill you own.
+- `write_personal_skill_file` — create/overwrite one file (defaults to SKILL.md).
+- `read_personal_skill_file` — read one file's text (defaults to SKILL.md).
+- `remove_personal_skill_file` — remove one file by path.
+
 **Lifecycle** — `src/tools/lifecycle.ts`
 - `publish_teammate` — publish a draft teammate.
 - `offboard_teammate` — offboard (reversible soft-delete).
