@@ -2,6 +2,7 @@ import type { AppConfig } from "../config.js";
 import { DiaflowClient } from "../diaflow/client.js";
 import { TeammatesApi } from "../diaflow/teammates.js";
 import { SkillsApi } from "../diaflow/skills.js";
+import { SkillUserApi } from "../diaflow/skill-users.js";
 import { ConversationsApi } from "../diaflow/conversations.js";
 import { SubAgentsApi } from "../diaflow/sub-agents.js";
 import { MemorySessionStore } from "../auth/session-store.js";
@@ -12,6 +13,7 @@ export interface ToolContext {
   client: DiaflowClient;
   teammates: TeammatesApi;
   skills: SkillsApi;
+  skillUsers: SkillUserApi;
   conversations: ConversationsApi;
   subAgents: SubAgentsApi;
   baseUrl: string;
@@ -41,6 +43,7 @@ export function buildContext(
     client,
     teammates: new TeammatesApi(client),
     skills: new SkillsApi(client),
+    skillUsers: new SkillUserApi(client),
     conversations: new ConversationsApi(client, cfg.messageWaitMs),
     subAgents: new SubAgentsApi(client),
     baseUrl: cfg.diaflowApiBase,
