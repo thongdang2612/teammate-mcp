@@ -113,3 +113,28 @@ export interface RunResult {
   reply?: string;
   error?: string;
 }
+
+export interface PersonalSkill {
+  id: number;
+  uniqueId: string;
+  workspaceId: number;
+  userId: number;
+  name: string;
+  description: string | null;
+  files: Record<string, string>;
+  isActive: boolean;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PresignedFileInfo {
+  uploadUrl: string;
+  key: string;
+  url: string;
+  contentType: string;
+}
+
+export interface PresignedUrlsResponse {
+  files: Record<string, PresignedFileInfo>;
+}
