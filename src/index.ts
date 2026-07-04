@@ -97,6 +97,10 @@ function mountMcp(app: Express, cfg: AppConfig, identityFor: (req: Request) => S
  */
 export function buildHttpApp(cfg: AppConfig): Express {
   const app = express();
+  // Behind Render/Cloud proxies the client IP arrives via X-Forwarded-For. Trust the first proxy
+  // hop so express-rate-limit (used by the SDK's OAuth router) can read the real IP instead of
+  // throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR, which otherwise breaks /authorize|/token|/register.
+  app.set("trust proxy", 1);
 
   if (cfg.authMode === "oauth") {
     const wiring = buildOAuthWiring(cfg);
