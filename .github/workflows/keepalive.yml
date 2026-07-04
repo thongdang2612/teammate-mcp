@@ -2,19 +2,26 @@ name: Keep Render warm
 
 # Free-tier Render web services spin down after ~15 min of inactivity; the next
 # request then waits ~30-60s for a cold start, which exceeds Diaflow's tool-call
-# timeout ("connected but tool times out"). This cron pings the PUBLIC OAuth
-# discovery endpoint (no auth, returns 200) on a schedule to keep the instance awake.
+# timeout ("connected but tool times out"). Pinging the PUBLIC OAuth discovery
+# endpoint (no auth, returns 200) on a tight schedule keeps the instance awake.
 #
-# Notes:
-# - GitHub-hosted cron is best-effort: runs can be delayed 5-15+ min under load,
-#   and scheduled workflows auto-disable after 60 days with no repo activity.
-#   For guaranteed uptime use Render's paid tier (no spin-down) or an external
-#   monitor (UptimeRobot / cron-job.org) hitting the same URL.
+# PRIMARY keepalive is an EXTERNAL monitor, NOT this workflow. GitHub-hosted cron
+# is best-effort and heavily throttled: a "*/10" schedule is silently coalesced to
+# roughly hourly (or worse) under load, so it CANNOT keep a 15-min-spindown service
+# warm. Set up a free external pinger hitting the same URL every 5 min:
+#   - cron-job.org: New cronjob → URL below → "Every 5 minutes" → save.
+#   - or UptimeRobot: HTTP(s) monitor → same URL → 5-min interval (free-tier min).
+#   Use a generous request timeout (~60-90s) so a single ping rides out a cold start.
+#
+# This workflow is now a BACKUP only: an hourly best-effort schedule (which GitHub
+# honors far more reliably than sub-hourly) plus manual runs. It reduces, but does
+# not eliminate, cold starts on its own. For zero spin-down use Render's paid tier.
 # - Change PING_URL if the deploy host changes.
+# - Scheduled workflows auto-disable after 60 days with no repo activity.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
+    - cron: "0 * * * *"       # hourly (UTC) — best-effort backup; external monitor is primary
   workflow_dispatch: {}       # allow manual runs from the Actions tab
 
 concurrency:
