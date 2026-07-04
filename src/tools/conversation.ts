@@ -6,12 +6,14 @@ import type { FileRef } from "../diaflow/types.js";
 import { uploadChatAttachment as defaultUpload } from "../diaflow/upload.js";
 import { TEAMMATE_ID_DESC } from "./descriptions.js";
 import { JobStore, jobStore as defaultJobStore } from "../teammate/job-store.js";
-import { startJob, raceGrace, runToCompletion, runRelay, type RelayStep } from "../teammate/runner.js";
+import { startJob, raceGrace, awaitJob, runToCompletion, runRelay, type RelayStep } from "../teammate/runner.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] });
 
 /** How long message_teammate holds the tool response, hoping a quick task finishes in one call. */
 const GRACE_MS = 8000;
+/** How long get_teammate_reply blocks waiting for a job — under Diaflow's 30s MCP-proxy cap. */
+const REPLY_WAIT_MS = 20000;
 
 export interface ConversationDeps {
   conversations: ConversationsApi;
@@ -20,6 +22,7 @@ export interface ConversationDeps {
   now?: () => Date;
   jobStore?: JobStore;
   graceMs?: number;
+  replyWaitMs?: number;
 }
 
 const BUSY = {
@@ -32,6 +35,7 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
   const now = deps.now ?? (() => new Date());
   const store = deps.jobStore ?? defaultJobStore;
   const graceMs = deps.graceMs ?? GRACE_MS;
+  const replyWaitMs = deps.replyWaitMs ?? REPLY_WAIT_MS;
 
   server.registerTool(
     "message_teammate",
@@ -114,10 +118,12 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       },
     },
     async (args) => {
-      const job = store.get(args.jobId);
-      if (!job) {
+      if (!store.get(args.jobId)) {
         return asText({ status: "unknown", note: "No job with that id — it may have expired or the server restarted. Start again with message_teammate or relay_teammates." });
       }
+      // Block for a real window (under the 30s proxy cap) so this poll actually WAITS for the job
+      // instead of returning instantly — otherwise the orchestrator hammers it and gives up in seconds.
+      const job = (await awaitJob(store, args.jobId, replyWaitMs))!;
       if (job.status === "completed") return asText(job.reply ?? "");
       if (job.status === "failed") return asText(`The teammate's run failed: ${job.error ?? "unknown error"}`);
       return asText({

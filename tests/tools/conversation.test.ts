@@ -57,7 +57,7 @@ describe("conversation tools", () => {
     const job = store.create("relay");
     store.update(job.id, { progress: "step 1/2 (A)" });
     const { server, tools } = fakeServer();
-    registerConversationTools(server as any, { conversations: {} as any, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: store } as any);
+    registerConversationTools(server as any, { conversations: {} as any, client: {} as any, uploadChatAttachment: vi.fn(), jobStore: store, replyWaitMs: 10 } as any);
     const out = await tools["get_teammate_reply"]({ jobId: job.id });
     const payload = JSON.parse(out.content[0].text);
     expect(payload.status).toBe("working");

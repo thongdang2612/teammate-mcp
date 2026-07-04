@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runToCompletion, runRelay, startJob } from "../../src/teammate/runner.js";
+import { runToCompletion, runRelay, startJob, awaitJob } from "../../src/teammate/runner.js";
 import { JobStore } from "../../src/teammate/job-store.js";
 import type { RunnerConversations } from "../../src/teammate/runner.js";
 
@@ -89,5 +89,30 @@ describe("startJob", () => {
     });
     await expect(settled).resolves.toBeDefined();
     expect(store.get(jobId)).toMatchObject({ status: "failed" as const, error: "kaboom" });
+  });
+});
+
+describe("awaitJob", () => {
+  it("returns immediately when the job is already terminal", async () => {
+    const store = new JobStore();
+    const job = store.create("message");
+    store.update(job.id, { status: "completed", reply: "r" });
+    const r = await awaitJob(store, job.id, 5000, { pollMs: 5 });
+    expect(r).toMatchObject({ status: "completed", reply: "r" });
+  });
+
+  it("returns the still-working job once the budget elapses", async () => {
+    const store = new JobStore();
+    const job = store.create("message");
+    const r = await awaitJob(store, job.id, 15, { pollMs: 5 });
+    expect(r).toMatchObject({ id: job.id, status: "working" });
+  });
+
+  it("resolves as soon as a working job completes mid-wait", async () => {
+    const store = new JobStore();
+    const job = store.create("message");
+    setTimeout(() => store.update(job.id, { status: "completed", reply: "late" }), 10);
+    const r = await awaitJob(store, job.id, 2000, { pollMs: 5 });
+    expect(r).toMatchObject({ status: "completed", reply: "late" });
   });
 });

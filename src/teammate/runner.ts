@@ -132,3 +132,26 @@ export function startJob(
 export async function raceGrace(settled: Promise<Job>, graceMs: number): Promise<Job | null> {
   return Promise.race([settled, delay(graceMs).then(() => null)]);
 }
+
+/**
+ * Poll the store for a job to reach a terminal state, up to `budgetMs` (kept under the 30s proxy
+ * cap). Returns the job when terminal or the budget elapses. This makes `get_teammate_reply` block
+ * for a meaningful window instead of returning instantly — so an orchestrator's poll actually
+ * *waits* rather than hammering the tool and giving up in seconds.
+ */
+export async function awaitJob(
+  store: JobStore,
+  jobId: string,
+  budgetMs: number,
+  opts: { pollMs?: number; now?: () => number } = {},
+): Promise<Job | undefined> {
+  const now = opts.now ?? (() => Date.now());
+  const pollMs = opts.pollMs ?? Math.min(500, Math.max(1, budgetMs));
+  const deadline = now() + budgetMs;
+  let job = store.get(jobId);
+  while (job && job.status === "working" && now() < deadline) {
+    await delay(pollMs);
+    job = store.get(jobId);
+  }
+  return job;
+}
