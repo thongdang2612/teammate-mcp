@@ -42,6 +42,27 @@ describe("write tools", () => {
     expect(teammates.update).toHaveBeenCalledWith("u1", { name: "B" });
   });
 
+  it("update_teammate resolves teammateName to an id, then updates", async () => {
+    const teammates = {
+      list: vi.fn(async () => ({ total: 2, results: [{ id: 9, uniqueId: "u9", name: "Ciel" }, { id: 3, uniqueId: "u3", name: "Diablo" }] })),
+      update: vi.fn(async () => ({ id: 9, uniqueId: "u9", name: "Raphael" })),
+    };
+    const { server, tools } = fakeServer();
+    registerWriteTools(server as any, { teammates } as any);
+    await tools["update_teammate"]({ teammateName: "ciel", name: "Raphael" });
+    expect(teammates.list).toHaveBeenCalledWith({ search: "ciel" });
+    expect(teammates.update).toHaveBeenCalledWith("u9", { name: "Raphael" });
+  });
+
+  it("update_teammate reports an error when teammateName matches nothing", async () => {
+    const teammates = { list: vi.fn(async () => ({ total: 1, results: [{ id: 3, uniqueId: "u3", name: "Diablo" }] })), update: vi.fn() };
+    const { server, tools } = fakeServer();
+    registerWriteTools(server as any, { teammates } as any);
+    const res = await tools["update_teammate"]({ teammateName: "Nobody", name: "X" });
+    expect(teammates.update).not.toHaveBeenCalled();
+    expect(res.content[0].text).toContain("No teammate named");
+  });
+
   it("check_teammate_name forwards the name and reports duplicate status", async () => {
     const teammates = { checkName: vi.fn(async () => ({ isDuplicate: true })) };
     const { server, tools } = fakeServer();

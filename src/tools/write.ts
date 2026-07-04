@@ -44,10 +44,12 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
         "Update a teammate's fields (name, model, description, instruction, tags, icon, ...). This is " +
         "the ONLY way to actually change a teammate — you MUST call it and confirm success before " +
         "telling the user the change is done; never just claim a rename/update happened without calling it. " +
-        "To change YOUR OWN name or info, first call list_teammates, find the teammate whose name matches " +
-        "the one you currently go by, use its teammateId here, then apply the change.",
+        "Identify the teammate by EITHER teammateId OR teammateName (its current name, resolved server-side). " +
+        "To change YOUR OWN name/info, pass teammateName = the name you currently go by (e.g. \"Ciel\") — " +
+        "no id lookup needed.",
       inputSchema: {
-        teammateId: z.string().min(1).describe(TEAMMATE_ID_DESC),
+        teammateId: z.string().optional().describe(TEAMMATE_ID_DESC + " Provide this OR teammateName."),
+        teammateName: z.string().optional().describe("The teammate's CURRENT name — resolved to its id on the server. Use this (instead of teammateId) for a self-rename: pass the name you currently go by."),
         name: z.string().optional(),
         title: z.string().optional(),
         modelProvider: z.string().optional(),
@@ -63,8 +65,19 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
       },
     },
     async (args) => {
-      const { teammateId, ...fields } = args;
-      return asText(await ctx.teammates.update(teammateId, fields));
+      const { teammateId, teammateName, ...fields } = args;
+      let id = teammateId;
+      if (!id) {
+        if (!teammateName) return asText({ error: "Provide teammateId or teammateName to identify the teammate to update." });
+        const page = await ctx.teammates.list({ search: teammateName });
+        const wanted = teammateName.trim().toLowerCase();
+        const match = page.results.find((a) => (a.name ?? "").trim().toLowerCase() === wanted);
+        if (!match) {
+          return asText({ error: `No teammate named "${teammateName}" found.`, candidates: page.results.map((a) => a.name).filter(Boolean) });
+        }
+        id = match.uniqueId;
+      }
+      return asText(await ctx.teammates.update(id, fields));
     },
   );
 
