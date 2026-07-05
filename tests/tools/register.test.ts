@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { registerAllTools } from "../../src/tools/register.js";
+import { describe, it, expect, vi } from "vitest";
+import { registerAllTools, installToolUseLogging } from "../../src/tools/register.js";
 import { buildContext } from "../../src/tools/context.js";
 import { loadConfig } from "../../src/config.js";
 
@@ -28,5 +28,36 @@ describe("registerAllTools", () => {
     expect(tools["connect_diaflow"]).toBeUndefined();
     expect(tools["set_workspace"]).toBeUndefined();
     expect(tools["list_teammates"]).toBeDefined();
+  });
+});
+
+describe("installToolUseLogging", () => {
+  it("logs a [tool-use] ok line for every tool and passes the result through", async () => {
+    const { server, tools } = fakeServer();
+    installToolUseLogging(server as any);
+    server.registerTool("demo", {} as any, (async (a: any) => ({ ok: a.x })) as any);
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((m: any) => { lines.push(String(m)); });
+    try {
+      const res = await tools["demo"]({ x: 1 }, {});
+      expect(res).toEqual({ ok: 1 });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines.some((l) => l.includes("[tool-use] tool=demo -> ok"))).toBe(true);
+  });
+
+  it("logs a [tool-use] throw line and rethrows when a tool handler fails", async () => {
+    const { server, tools } = fakeServer();
+    installToolUseLogging(server as any);
+    server.registerTool("boom", {} as any, (async () => { throw new Error("nope"); }) as any);
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((m: any) => { lines.push(String(m)); });
+    try {
+      await expect(tools["boom"]({}, {})).rejects.toThrow("nope");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines.some((l) => l.includes("[tool-use] tool=boom -> throw"))).toBe(true);
   });
 });
