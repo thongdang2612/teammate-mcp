@@ -24,8 +24,9 @@ async function main(): Promise<void> {
 type SessionIdentity = Parameters<typeof buildContext>[1];
 
 /**
- * Logs one line per /mcp request (method, auth state, JSON-RPC method + tool name, final status)
- * so tool-call activity is visible in the platform's log tab. Reads fields lazily at `finish` so it
+ * Logs one line per /mcp request. Tool invocations are tagged `[tool-use]` (with `tool=<name>`)
+ * so they can be filtered apart from general request noise (`[mcp]` for initialize/tools-list/etc.);
+ * everything else keeps the `[mcp]` tag. Reads fields lazily at `finish` so it
  * can run FIRST (before auth + json) yet still see req.body / req.auth once populated — and still
  * log requests rejected before those run (e.g. 401 with no/invalid token). `console.error` (stderr)
  * matches the rest of the file and is captured by Render/Docker.
@@ -36,7 +37,14 @@ function mcpRequestLogger(req: Request, res: Response, next: NextFunction): void
     const rpc = req.method === "POST" && body && typeof body.method === "string" ? body.method : "";
     const tool = rpc === "tools/call" ? (body?.params?.name ?? "?") : "";
     const auth = req.auth ? "auth-ok" : req.headers["authorization"] ? "bearer" : "noauth";
-    console.error(`[mcp] ${req.method} ${auth} rpc=${rpc}${tool ? ":" + tool : ""} -> ${res.statusCode}`);
+    // Tool invocations get a dedicated `[tool-use]` tag so they can be filtered out of
+    // the general request noise (initialize / tools/list / pings) — grep `[tool-use]`
+    // for exactly the tools that ran, and `tool=<name>` for a specific tool.
+    if (tool) {
+      console.error(`[tool-use] tool=${tool} ${auth} -> ${res.statusCode}`);
+    } else {
+      console.error(`[mcp] ${req.method} ${auth} rpc=${rpc} -> ${res.statusCode}`);
+    }
   });
   next();
 }
