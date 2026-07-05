@@ -161,4 +161,18 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       return asText({ stopped: true, sessionId: args.sessionId });
     },
   );
+
+  server.registerTool(
+    "rename_conversation",
+    {
+      description:
+        "Set the title of a conversation session (the title is otherwise auto-generated from the first " +
+        "message). Find the sessionId with list_conversations first.",
+      inputSchema: {
+        sessionId: z.string().min(1).describe("The conversation session id (from list_conversations)."),
+        title: z.string().min(1).max(200).describe("The new title (1-200 characters)."),
+      },
+    },
+    async (args) => asText(await deps.conversations.updateTitle(args.sessionId, args.title)),
+  );
 }

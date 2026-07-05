@@ -96,4 +96,13 @@ describe("conversation tools", () => {
     expect(conversations.stop).toHaveBeenCalledWith("s1");
     expect(res.content[0].text).toContain("stopped");
   });
+
+  it("rename_conversation forwards sessionId + title to updateTitle", async () => {
+    const conversations = { updateTitle: vi.fn(async () => ({ sessionId: "s1", title: "New title" })) };
+    const { server, tools } = fakeServer();
+    registerConversationTools(server as any, { conversations, client: {} as any } as any);
+    const res = await tools["rename_conversation"]({ sessionId: "s1", title: "New title" });
+    expect(conversations.updateTitle).toHaveBeenCalledWith("s1", "New title");
+    expect(res.content[0].text).toContain("New title");
+  });
 });

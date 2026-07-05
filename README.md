@@ -130,6 +130,7 @@ All tools are registered by `src/tools/register.ts`. Names below match `server.r
 - `list_conversations` — list conversation sessions, optionally filtered by teammate.
 - `get_conversation` — get a conversation session's message history.
 - `stop_conversation` — cancel an in-progress conversation run.
+- `rename_conversation` — set a conversation session's title (otherwise auto-generated); find the `sessionId` via `list_conversations`.
 
 **Sub-agents** — `src/tools/sub-agents.ts`
 - `list_sub_agents` — sub-agents attached to an orchestrator teammate.

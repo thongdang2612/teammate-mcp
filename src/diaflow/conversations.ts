@@ -180,4 +180,14 @@ export class ConversationsApi {
   stop(sessionId: string): Promise<void> {
     return this.client.request<void>("POST", `/agent-runtime/sessions/${encodeURIComponent(sessionId)}/stop`);
   }
+
+  /** Set a conversation session's title (otherwise auto-generated). PUT /agent-runtime/sessions/{id}. */
+  async updateTitle(sessionId: string, title: string): Promise<{ sessionId: string; title: string }> {
+    const r = await this.client.request<{ session_id: string; title: string }>(
+      "PUT",
+      `/agent-runtime/sessions/${encodeURIComponent(sessionId)}`,
+      { body: { title } },
+    );
+    return { sessionId: r.session_id, title: r.title };
+  }
 }

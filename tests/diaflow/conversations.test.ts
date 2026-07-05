@@ -142,4 +142,14 @@ describe("ConversationsApi", () => {
     await new ConversationsApi(client(f)).getHistory("T1");
     expect(f.mock.calls[0][0]).toBe("https://x/api/v1/agent-runtime/sessions/T1/history?limit=50");
   });
+
+  it("updateTitle PUTs the title and maps the session_id response to sessionId", async () => {
+    const f = vi.fn(async (_url?: string, _init?: RequestInit) => json({ session_id: "T1", title: "My chat" }));
+    const r = await new ConversationsApi(client(f)).updateTitle("T1", "My chat");
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("https://x/api/v1/agent-runtime/sessions/T1");
+    expect((init as RequestInit).method).toBe("PUT");
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ title: "My chat" });
+    expect(r).toEqual({ sessionId: "T1", title: "My chat" });
+  });
 });
