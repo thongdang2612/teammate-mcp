@@ -58,9 +58,11 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       description:
         "Send a message to ONE teammate and get their reply. The teammate runs in the background on " +
         "the server (so long tasks are not cut off): a quick reply comes back inline as plain text; " +
-        "a longer one returns { status: \"working\", jobId } — then call get_teammate_reply with that " +
-        "jobId to fetch the result (it finishes server-side even if you check back later). Omit " +
-        "teammateId only to continue an existing thread. " +
+        "a longer one returns { status: \"working\", jobId, pollToken } — then call get_teammate_reply " +
+        "with that pollToken to fetch the result, and keep calling it with each new pollToken it returns " +
+        "until status is \"completed\" (it finishes server-side even if you check back later). This " +
+        "repeated polling is the expected protocol, not a loop — never stop or ask the user to continue. " +
+        "Omit teammateId only to continue an existing thread. " +
         "IMPORTANT: if the task is to take one teammate's reply and pass it to ANOTHER teammate " +
         "(any \"ask X, then send it to Y\" or A→B→C hand-off), do NOT chain message_teammate calls " +
         "yourself — call relay_teammates instead. It runs the whole chain server-side in one step and " +
@@ -87,11 +89,12 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       const graced = await raceGrace(settled, graceMs);
       if (graced?.status === "completed") return asText(graced.reply ?? "");
       if (graced?.status === "failed") return asText(`The teammate's run failed: ${graced.error ?? "unknown error"}`);
+      const pollToken = makePollToken(jobId, 1);
       return asText({
         status: "working",
         jobId,
-        pollToken: makePollToken(jobId, 1),
-        note: `The teammate is working in the background. Call get_teammate_reply with pollToken "${makePollToken(jobId, 1)}" to fetch the result. Keep calling get_teammate_reply with each new pollToken it returns until status is "completed" — this is the expected protocol, not a loop; do NOT stop or ask the user to continue.`,
+        pollToken,
+        note: `The teammate is working in the background. Call get_teammate_reply with pollToken "${pollToken}" to fetch the result. Keep calling get_teammate_reply with each new pollToken it returns until status is "completed" — this is the expected protocol, not a loop; do NOT stop or ask the user to continue.`,
       });
     },
   );
@@ -104,9 +107,11 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
         "A's answer to B\", or A→B→C. It is the correct tool for every multi-teammate hand-off; do not " +
         "emulate it with multiple message_teammate calls. Runs a sequential relay: the message goes to " +
         "the first teammate, its reply feeds the next, and so on — the ENTIRE chain runs in the " +
-        "background on the server, no per-step waiting from you. Returns { status: \"working\", jobId }; " +
-        "call get_teammate_reply with that jobId to fetch the final result once the chain completes. " +
-        "Each step may include an optional instruction prepended to the previous step's output.",
+        "background on the server, no per-step waiting from you. Returns { status: \"working\", jobId, " +
+        "pollToken }; call get_teammate_reply with that pollToken to fetch the final result once the " +
+        "chain completes, and keep calling it with each new pollToken it returns until status is " +
+        "\"completed\" — this is the expected protocol, not a loop; never stop or ask the user to " +
+        "continue. Each step may include an optional instruction prepended to the previous step's output.",
       inputSchema: {
         message: z.string().min(1).describe("The initial message given to the first teammate in the chain."),
         steps: z
@@ -119,11 +124,12 @@ export function registerConversationTools(server: McpServer, deps: ConversationD
       if (store.atCapacity()) return asText(BUSY);
       const steps: RelayStep[] = args.steps;
       const { jobId } = startJob(store, "relay", (onProgress) => runRelay(deps.conversations, steps, args.message, { onProgress }));
+      const pollToken = makePollToken(jobId, 1);
       return asText({
         status: "working",
         jobId,
-        pollToken: makePollToken(jobId, 1),
-        note: `Relay started across ${steps.length} teammate(s), running in the background. Call get_teammate_reply with pollToken "${makePollToken(jobId, 1)}", then keep calling it with each new pollToken it returns until status is "completed" — this is the expected protocol, not a loop; do NOT stop or ask the user to continue.`,
+        pollToken,
+        note: `Relay started across ${steps.length} teammate(s), running in the background. Call get_teammate_reply with pollToken "${pollToken}", then keep calling it with each new pollToken it returns until status is "completed" — this is the expected protocol, not a loop; do NOT stop or ask the user to continue.`,
       });
     },
   );
