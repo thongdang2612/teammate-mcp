@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolContext } from "./context.js";
 import { TEAMMATE_ID_DESC } from "./descriptions.js";
+import { resolveTeammateId } from "./resolve-teammate.js";
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -66,18 +67,9 @@ export function registerWriteTools(server: McpServer, ctx: Pick<ToolContext, "te
     },
     async (args) => {
       const { teammateId, teammateName, ...fields } = args;
-      let id = teammateId;
-      if (!id) {
-        if (!teammateName) return asText({ error: "Provide teammateId or teammateName to identify the teammate to update." });
-        const page = await ctx.teammates.list({ search: teammateName });
-        const wanted = teammateName.trim().toLowerCase();
-        const match = page.results.find((a) => (a.name ?? "").trim().toLowerCase() === wanted);
-        if (!match) {
-          return asText({ error: `No teammate named "${teammateName}" found.`, candidates: page.results.map((a) => a.name).filter(Boolean) });
-        }
-        id = match.uniqueId;
-      }
-      return asText(await ctx.teammates.update(id, fields));
+      const resolved = await resolveTeammateId(ctx.teammates, { teammateId, teammateName });
+      if (!resolved.ok) return asText({ error: resolved.error, candidates: resolved.candidates });
+      return asText(await ctx.teammates.update(resolved.id, fields));
     },
   );
 

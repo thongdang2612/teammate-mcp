@@ -140,6 +140,9 @@ All tools are registered by `src/tools/register.ts`. Names below match `server.r
 **Integration** — `src/tools/integration.ts`
 - `register_self_as_custom_mcp` — register this MCP server itself as a Diaflow custom-MCP resource in the active workspace (requires `MCP_PUBLIC_URL` and, for authenticated deploys, `MCP_INBOUND_TOKEN`).
 - `attach_self_to_teammate` — attach a registered custom-MCP resource to a teammate so that teammate can call this server's tools at runtime.
+- `list_teammate_connectors` — list the connectors (apps/MCP integrations) attached to a teammate (by `teammateId` or `teammateName`); use it to discover an existing connector's `nodeType` / `resourceId` / actions.
+- `add_connector` — attach an EXISTING workspace connector (identified by `nodeType`, e.g. `mcp_custom__12`) to a teammate; optionally scope its tools via `actions` or per-tool `permissions`.
+- `set_connector_permissions` — change a connector's per-tool action permissions on a teammate (tri-state `allow`/`ask`/`deny`); upserts the existing attachment without re-adding it.
 
 ## Manual verification
 

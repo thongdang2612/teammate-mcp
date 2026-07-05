@@ -28,7 +28,7 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerSkillTools(server, { skills: ctx.skills });
   registerSkillAuthoringTools(server, { skillUsers: ctx.skillUsers });
   registerLifecycleTools(server, ctx);
-  registerIntegrationTools(server, { client: ctx.client, provider: ctx.provider, publicUrl: ctx.publicUrl, inboundToken: ctx.inboundToken });
+  registerIntegrationTools(server, { client: ctx.client, provider: ctx.provider, teammates: ctx.teammates, publicUrl: ctx.publicUrl, inboundToken: ctx.inboundToken });
   registerConversationTools(server, { conversations: ctx.conversations, client: ctx.client });
   registerSubAgentTools(server, { subAgents: ctx.subAgents });
 }
