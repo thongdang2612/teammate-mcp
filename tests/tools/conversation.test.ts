@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { registerConversationTools } from "../../src/tools/conversation.js";
+import { registerConversationTools, makePollToken, parsePollToken } from "../../src/tools/conversation.js";
 import { JobStore } from "../../src/teammate/job-store.js";
 
 function fakeServer() {
@@ -104,5 +104,25 @@ describe("conversation tools", () => {
     const res = await tools["rename_conversation"]({ sessionId: "s1", title: "New title" });
     expect(conversations.updateTitle).toHaveBeenCalledWith("s1", "New title");
     expect(res.content[0].text).toContain("New title");
+  });
+});
+
+describe("pollToken helpers", () => {
+  it("makePollToken encodes the job id and next poll number", () => {
+    expect(makePollToken("abc", 1)).toBe("abc::p1");
+    expect(makePollToken("abc", 7)).toBe("abc::p7");
+  });
+
+  it("parsePollToken returns poll 0 for a raw job id", () => {
+    expect(parsePollToken("abc-123")).toEqual({ jobId: "abc-123", pollNumber: 0 });
+  });
+
+  it("parsePollToken extracts the id and poll number from a token", () => {
+    expect(parsePollToken("abc-123::p4")).toEqual({ jobId: "abc-123", pollNumber: 4 });
+  });
+
+  it("parsePollToken treats a malformed suffix as a raw id (poll 0)", () => {
+    expect(parsePollToken("abc::pX")).toEqual({ jobId: "abc::pX", pollNumber: 0 });
+    expect(parsePollToken("abc::")).toEqual({ jobId: "abc::", pollNumber: 0 });
   });
 });

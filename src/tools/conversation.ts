@@ -10,6 +10,21 @@ import { startJob, raceGrace, awaitJob, runToCompletion, runRelay, type RelaySte
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] });
 
+/** Encode the next poll number into the id the orchestrator passes back, so each poll's args differ. */
+export function makePollToken(jobId: string, nextPoll: number): string {
+  return `${jobId}::p${nextPoll}`;
+}
+
+/** Recover the real job id + current poll number from a raw jobId or a "<jobId>::p<N>" token. */
+export function parsePollToken(raw: string): { jobId: string; pollNumber: number } {
+  const idx = raw.lastIndexOf("::p");
+  if (idx > 0) {
+    const suffix = raw.slice(idx + 3);
+    if (/^\d+$/.test(suffix)) return { jobId: raw.slice(0, idx), pollNumber: Number(suffix) };
+  }
+  return { jobId: raw, pollNumber: 0 };
+}
+
 /** How long message_teammate holds the tool response, hoping a quick task finishes in one call. */
 const GRACE_MS = 8000;
 /** How long get_teammate_reply blocks waiting for a job — under Diaflow's 30s MCP-proxy cap. */
